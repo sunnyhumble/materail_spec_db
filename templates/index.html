@@ -1,0 +1,2601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金属材料规范数据库</title>
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f5f7fa;
+            min-height: 100vh;
+            font-size: 13px;
+        }
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(180deg, #1a365d 0%, #2c5282 100%);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 5px 8px;
+            border-radius: 6px;
+            margin: 1px 0;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+        }
+        .sidebar .nav-link i {
+            margin-right: 5px;
+        }
+        .sidebar h4 {
+            font-size: 15px;
+        }
+        .sidebar h4 i {
+            margin-right: 4px;
+        }
+        .main-content {
+            padding: 15px;
+        }
+        .card {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 15px;
+        }
+        .card-header {
+            background: #fff;
+            border-bottom: 2px solid #f0f0f0;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .card-body {
+            padding: 12px 16px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+            border: none;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2c5282 0%, #1a365d 100%);
+        }
+        .btn {
+            font-size: 13px;
+            padding: 5px 12px;
+        }
+        .btn-sm {
+            font-size: 12px;
+            padding: 3px 8px;
+        }
+        .table-responsive {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .table {
+            font-size: 13px;
+        }
+        .table thead {
+            background: #f8f9fa;
+        }
+        .table th {
+            font-weight: 600;
+            color: #4a5568;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 8px;
+            font-size: 13px;
+        }
+        .table td {
+            vertical-align: middle;
+            padding: 6px 8px;
+        }
+        .table td.action-cell {
+            white-space: nowrap;
+        }
+        .badge-category {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-size: 12px;
+            padding: 3px 6px;
+        }
+        .modal-lg {
+            max-width: 900px;
+        }
+        .form-label {
+            font-weight: 500;
+            color: #4a5568;
+            font-size: 13px;
+            margin-bottom: 3px;
+        }
+        .form-control, .form-select {
+            font-size: 13px;
+            padding: 5px 10px;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            color: #4a5568;
+            padding: 10px 16px;
+            font-size: 14px;
+        }
+        .nav-tabs .nav-link.active {
+            border-bottom: 3px solid #3182ce;
+            color: #3182ce;
+            font-weight: 600;
+        }
+        .property-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .property-card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+            border-left: 3px solid #3182ce;
+            min-width: 130px;
+            max-width: 160px;
+            flex: 0 1 auto;
+        }
+        .property-name {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 12px;
+            margin-bottom: 0px;
+            word-break: break-word;
+            white-space: normal;
+            line-height: 1.2;
+        }
+        .property-unit {
+            color: #718096;
+            font-size: 11px;
+            font-weight: 400;
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+        .property-value {
+            color: #2d3748;
+            font-size: 14px;
+            font-weight: 600;
+            word-break: break-word;
+            line-height: 1.4;
+            margin-top: 6px;
+        }
+        .loading {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #a0aec0;
+        }
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        .empty-state h5 {
+            font-size: 16px;
+        }
+        .empty-state p {
+            font-size: 13px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .stat-card h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .stat-card p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 13px;
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 280px;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+        .json-editor {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            min-height: 500px !important;
+            height: 500px !important;
+            resize: vertical;
+        }
+        .modal-body {
+            font-size: 13px;
+        }
+        .modal-body .row {
+            margin-bottom: 8px;
+        }
+        .text-primary, .text-success, .text-warning, .text-danger {
+            font-size: 13px;
+        }
+        h4, h5, h6 {
+            font-size: 14px;
+        }
+        h6.text-primary {
+            font-size: 13px;
+        }
+        .text-muted {
+            font-size: 12px;
+        }
+        small {
+            font-size: 11px;
+        }
+        .input-group-text {
+            font-size: 12px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-1 sidebar p-2">
+                <h4 class="text-white text-center mb-2">
+                    <i class="bi bi-database"></i> 材料规范库
+                </h4>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-page="list">
+                            <i class="bi bi-list-ul"></i> 数据查询
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="add">
+                            <i class="bi bi-plus-circle"></i> 手工录入
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="import">
+                            <i class="bi bi-upload"></i> 图片识别
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="statistics">
+                            <i class="bi bi-bar-chart"></i> 数据统计
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="fields">
+                            <i class="bi bi-gear"></i> 字段管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-page="fieldmappings">
+                            <i class="bi bi-arrow-left-right"></i> 字段映射
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="col-md-11 main-content">
+                <div id="statsPage" style="display: none;">
+                    <h4 class="mb-4">数据统计</h4>
+                    <div class="row" id="statsContainer">
+                    </div>
+                </div>
+
+                <div id="listPage">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4><i class="bi bi-list-ul"></i> 材料规范数据查询</h4>
+                        <div>
+                            <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDeleteSpecs()" style="display: none;">
+                                <i class="bi bi-trash"></i> 删除选中 (<span id="selectedCount">0</span>)
+                            </button>
+                            <button class="btn btn-primary ms-2" onclick="showAddModal()">
+                                <i class="bi bi-plus-lg"></i> 新增材料规范数据
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <form id="searchForm" class="row g-2">
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control" id="searchSpecNumber" placeholder="编号">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control" id="searchAlloyGrade" placeholder="牌号">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control" id="searchStatus" placeholder="状态">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="text" class="form-control" id="searchSpecification" placeholder="规格">
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-select" id="searchDirection">
+                                        <option value="">全部方向</option>
+                                        <option value="纵向">纵向</option>
+                                        <option value="横向">横向</option>
+                                        <option value="高向">高向</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-select" id="searchCategory">
+                                        <option value="">全部类别</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="date" class="form-control" id="searchUpdateTime" title="查询该日期及之后更新的记录">
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="bi bi-search"></i> 查询
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0" id="specTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
+                                        <th>编号</th>
+                                        <th>牌号</th>
+                                        <th>状态</th>
+                                        <th>规格</th>
+                                        <th>类别</th>
+                                        <th style="width: 100px;">取样方向</th>
+                                        <th style="width: 150px;">更新时间</th>
+                                        <th style="width: 160px;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="specTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="empty-state" id="emptyState" style="display: none;">
+                            <i class="bi bi-inbox"></i>
+                            <h5>暂无数据</h5>
+                            <p>请添加或导入材料规范数据</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="addPage" style="display: none;">
+                    <h4 class="mb-4"><i class="bi bi-plus-circle"></i> 手工录入</h4>
+                    <div class="card">
+                        <div class="card-body">
+                            <form id="addSpecForm">
+                                <div class="mb-4">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check-lg"></i> 保存
+                                    </button>
+                                    <button type="reset" class="btn btn-secondary ms-2">
+                                        <i class="bi bi-arrow-counterclockwise"></i> 重置
+                                    </button>
+                                </div>
+                                
+                                <h6 class="text-primary mb-3">基本信息</h6>
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label">编号 *</label>
+                                        <input type="text" class="form-control" name="material_spec_number" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">类别 *</label>
+                                        <select class="form-select" name="test_category_code" id="addCategorySelect" required>
+                                            <option value="">请选择类别</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mt-3">
+                                        <label class="form-label">牌号 *</label>
+                                        <input type="text" class="form-control" name="alloy_grade" required>
+                                    </div>
+                                    <div class="col-md-6 mt-3">
+                                        <label class="form-label">状态 *</label>
+                                        <input type="text" class="form-control" name="status" required>
+                                    </div>
+                                    <div class="col-md-6 mt-3">
+                                        <label class="form-label">规格 *</label>
+                                        <input type="text" class="form-control" name="specification" required>
+                                    </div>
+                                    <div class="col-md-6 mt-3">
+                                        <label class="form-label">取样方向 *</label>
+                                        <select class="form-select" name="sampling_direction" required>
+                                            <option value="">请选择方向</option>
+                                            <option value="-">-</option>
+                                            <option value="纵向">纵向</option>
+                                            <option value="横向">横向</option>
+                                            <option value="高向">高向</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-12 mt-3">
+                                        <label class="form-label">附加条件</label>
+                                        <input type="text" class="form-control" name="additional_conditions[heat_treatment]" placeholder="热处理工艺，如：正火:910~930℃, 1h 空冷">
+                                    </div>
+                                </div>
+                                
+                                <h6 class="text-primary mb-3">性能指标</h6>
+                                <div id="testFieldsContainer">
+                                    <p class="text-muted">请先选择类别</p>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="importPage" style="display: none;">
+                    <h4 class="mb-4"><i class="bi bi-upload"></i> 图片识别导入</h4>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-5">
+                                    <div class="mb-3">
+                                        <label class="form-label">选择测试类别</label>
+                                        <select class="form-select" id="importCategorySelect">
+                                            <option value="">自动识别</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">规范编号 <span class="text-muted small">(手工填写)</span></label>
+                                        <input type="text" class="form-control" id="importSpecNumber" placeholder="请输入规范编号">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">牌号 <span class="text-muted small">(手工填写)</span></label>
+                                        <input type="text" class="form-control" id="importAlloyGrade" placeholder="请输入牌号">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">上传图片</label>
+                                        <input type="file" class="form-control" id="imageInput" accept="image/*">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">粘贴图片</label>
+                                        <div id="pasteArea" class="paste-area" style="min-height: 400px; height: 400px; border: 2px dashed #ccc; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fafafa; transition: all 0.3s;" onclick="focusPasteInput()">
+                                            <div id="pastePlaceholder" style="text-align: center; color: #999;">
+                                                <i class="bi bi-clipboard" style="font-size: 2rem;"></i>
+                                                <p style="margin: 10px 0 0 0;">按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 粘贴图片</p>
+                                            </div>
+                                            <img id="imagePreview" class="image-preview" style="display: none; max-width: 100%; max-height: 200px;">
+                                        </div>
+                                        <input type="text" id="pasteInput" style="position: absolute; left: -9999px;" placeholder="粘贴图片区域">
+                                    </div>
+                                    <div class="mb-3">
+                                        <button class="btn btn-primary" onclick="parseImage()">
+                                            <i class="bi bi-robot"></i> 识别图片
+                                        </button>
+                                        <button class="btn btn-outline-secondary ms-2" onclick="clearImage()">
+                                            <i class="bi bi-x-lg"></i> 清除
+                                        </button>
+                                    </div>
+                                    <div class="mt-3" id="parseStatus"></div>
+                                </div>
+                                <div class="col-md-7">
+                                    <label class="form-label">识别结果</label>
+                                    <textarea class="form-control json-editor" id="parseResult" placeholder="识别结果将显示在这里..."></textarea>
+                                    <div class="mt-3">
+                                        <button class="btn btn-success" onclick="importParsedData()">
+                                            <i class="bi bi-download"></i> 导入数据
+                                        </button>
+                                        <button class="btn btn-secondary ms-2" onclick="editParsedData()">
+                                            <i class="bi bi-pencil"></i> 编辑
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fieldsPage" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4><i class="bi bi-gear"></i> 字段管理</h4>
+                        <div>
+                            <button class="btn btn-primary" onclick="showAddCategoryModal()">
+                                <i class="bi bi-plus-lg"></i> 新增类别
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="categoryFilter">
+                        <button class="btn btn-primary me-2" id="filterAll" onclick="filterCategory('all')">全部</button>
+                    </div>
+
+                    <div id="all-fields">
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <div class="mb-3" id="categoriesList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fieldMappingsPage" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4><i class="bi bi-arrow-left-right"></i> 字段映射管理</h4>
+                        <div>
+                            <span class="badge bg-info me-3" id="fieldMappingsCount">共 0 条映射</span>
+                            <button class="btn btn-primary" onclick="showAddFieldMappingModal()">
+                                <i class="bi bi-plus-lg"></i> 新增映射
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control" id="fieldMappingSearchSource" placeholder="搜索源字段名">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control" id="fieldMappingSearchTarget" placeholder="搜索目标字段代码">
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-select" id="fieldMappingFilterCategory">
+                                        <option value="">全部类别</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-primary" onclick="loadFieldMappings()">
+                                        <i class="bi bi-search"></i> 搜索
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="fieldMappingsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>源字段名（多个用逗号分隔）</th>
+                                            <th>目标字段代码</th>
+                                            <th>适用类别</th>
+                                            <th>是否启用</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fieldMappingsTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="specModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">查看详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="editBtn" onclick="enableEdit()">
+                        <i class="bi bi-pencil"></i> 编辑
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 字段管理模态框 -->
+    <div class="modal fade" id="categoryModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="categoryModalTitle">新增测试类别</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="categoryForm">
+                        <input type="hidden" id="categoryId">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">类别名称 *</label>
+                                <input type="text" class="form-control" id="categoryName" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">类别代码 *</label>
+                                <input type="text" class="form-control" id="categoryCode" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <textarea class="form-control" id="categoryDescription" rows="3"></textarea>
+                        </div>
+                        
+                        <h6 class="text-primary mb-3">字段定义</h6>
+                        <div id="fieldsContainer">
+                            <div class="field-item mb-3 p-3 border rounded">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label class="form-label">字段名称 *</label>
+                                        <input type="text" class="form-control field-name" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">字段代码 *</label>
+                                        <input type="text" class="form-control field-code" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">字段类型 *</label>
+                                        <select class="form-select field-type" required>
+                                            <option value="range">范围</option>
+                                            <option value="string">字符串</option>
+                                            <option value="number">数字</option>
+                                            <option value="text">文本</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">单位</label>
+                                        <input type="text" class="form-control field-unit">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">排序</label>
+                                        <input type="number" class="form-control field-sort" value="0">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <label class="form-label">描述</label>
+                                        <input type="text" class="form-control field-description">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input field-required" type="checkbox">
+                                            <label class="form-check-label">必填字段</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-12 mt-2 text-end">
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="removeField(this)">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-outline-secondary" onclick="addFieldItem()">
+                                <i class="bi bi-plus"></i> 添加字段
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveCategory()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="fieldMappingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fieldMappingModalTitle">新增字段映射</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="fieldMappingForm">
+                        <input type="hidden" id="fieldMappingId">
+                        <div class="mb-3">
+                            <label class="form-label">源字段名 *</label>
+                            <div id="sourceFieldsContainer">
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control source-field-input" placeholder="源字段名">
+                                    <button type="button" class="btn btn-outline-danger" onclick="removeSourceField(this)" style="display: none;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addSourceField()">
+                                <i class="bi bi-plus-lg"></i> 添加源字段
+                            </button>
+                            <small class="text-muted d-block mt-1">大模型识别可能出错的字段名，可以添加多个</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">目标字段代码 *</label>
+                            <input type="text" class="form-control" id="fieldMappingTargetField" required placeholder="如：a_ku2">
+                            <small class="text-muted">数据库中正确的字段代码</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">适用类别</label>
+                            <select class="form-select" id="fieldMappingCategoryCode">
+                                <option value="">通用（所有类别）</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="fieldMappingIsActive" checked>
+                                <label class="form-check-label">启用</label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveFieldMapping()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        let categories = [];
+        let currentSpecs = [];
+        let parsedData = [];
+        let currentEditId = null;
+        let modal = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM 加载完成');
+            modal = new bootstrap.Modal(document.getElementById('specModal'));
+            loadCategories();
+            loadSpecs();
+            loadStats();
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                console.log('绑定导航链接:', link.dataset.page);
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('点击导航:', this.dataset.page);
+                    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                    const page = this.dataset.page;
+                    showPage(page);
+                });
+            });
+            
+            document.getElementById('searchForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                loadSpecs();
+            });
+            
+            document.getElementById('addSpecForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSpec();
+            });
+            
+            document.getElementById('addCategorySelect').addEventListener('change', function() {
+                loadTestFields(this.value, 'testFieldsContainer');
+            });
+            
+            document.getElementById('imageInput').addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('imagePreview').src = e.target.result;
+                        document.getElementById('imagePreview').style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            document.addEventListener('paste', function(e) {
+                const items = e.clipboardData.items;
+                if (!items) return;
+                
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        const blob = items[i].getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            document.getElementById('imagePreview').src = e.target.result;
+                            document.getElementById('imagePreview').style.display = 'block';
+                            document.getElementById('pastePlaceholder').style.display = 'none';
+                            document.getElementById('imageInput').value = '';
+                        };
+                        reader.readAsDataURL(blob);
+                        break;
+                    }
+                }
+            });
+            
+            document.getElementById('pasteArea').addEventListener('paste', function(e) {
+                e.stopPropagation();
+                const items = e.clipboardData.items;
+                if (!items) return;
+                
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        const blob = items[i].getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            document.getElementById('imagePreview').src = e.target.result;
+                            document.getElementById('imagePreview').style.display = 'block';
+                            document.getElementById('pastePlaceholder').style.display = 'none';
+                            document.getElementById('imageInput').value = '';
+                        };
+                        reader.readAsDataURL(blob);
+                        break;
+                    }
+                }
+            });
+        });
+
+        function showPage(page) {
+            document.getElementById('listPage').style.display = page === 'list' ? 'block' : 'none';
+            document.getElementById('addPage').style.display = page === 'add' ? 'block' : 'none';
+            document.getElementById('importPage').style.display = page === 'import' ? 'block' : 'none';
+            document.getElementById('statsPage').style.display = page === 'statistics' ? 'block' : 'none';
+            document.getElementById('fieldsPage').style.display = page === 'fields' ? 'block' : 'none';
+            document.getElementById('fieldMappingsPage').style.display = page === 'fieldmappings' ? 'block' : 'none';
+            
+            if (page === 'list') loadSpecs();
+            if (page === 'statistics') loadStats();
+            if (page === 'fields') loadCategoriesForAdmin();
+            if (page === 'fieldmappings') {
+                loadFieldMappings();
+                loadCategoriesForFieldMappingModal();
+            }
+        }
+
+        async function loadCategories() {
+            try {
+                const res = await fetch('/api/categories');
+                const data = await res.json();
+                if (data.success) {
+                    categories = data.data;
+                    const options = categories.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+                    document.getElementById('searchCategory').innerHTML = '<option value="">全部类别</option>' + options;
+                    document.getElementById('addCategorySelect').innerHTML = '<option value="">请选择类别</option>' + options;
+                    document.getElementById('importCategorySelect').innerHTML = '<option value="">自动识别</option>' + options;
+                }
+            } catch (e) {
+                console.error('加载类别失败:', e);
+            }
+        }
+        
+        async function loadCategoryFields(categoryCode) {
+            try {
+                const res = await fetch(`/api/category/${categoryCode}`);
+                const data = await res.json();
+                if (data.success && data.data && data.data.fields) {
+                    return data.data.fields;
+                }
+                return null;
+            } catch (e) {
+                console.error('加载字段定义失败:', e);
+                return null;
+            }
+        }
+
+        async function loadSpecs() {
+            const params = new URLSearchParams({
+                material_spec_number: document.getElementById('searchSpecNumber').value,
+                specification: document.getElementById('searchSpecification').value,
+                alloy_grade: document.getElementById('searchAlloyGrade').value,
+                status: document.getElementById('searchStatus').value,
+                test_category_code: document.getElementById('searchCategory').value,
+                sampling_direction: document.getElementById('searchDirection').value,
+                update_time: document.getElementById('searchUpdateTime').value
+            });
+            
+            try {
+                const res = await fetch('/api/specs?' + params);
+                const data = await res.json();
+                if (data.success) {
+                    currentSpecs = data.data;
+                    renderTable();
+                }
+            } catch (e) {
+                console.error('加载数据失败:', e);
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('specTableBody');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (currentSpecs.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.style.display = 'block';
+                document.querySelector('.table-responsive').style.display = 'none';
+                document.getElementById('selectAllCheckbox').checked = false;
+                document.getElementById('batchDeleteBtn').style.display = 'none';
+                return;
+            }
+            
+            document.querySelector('.table-responsive').style.display = 'block';
+            emptyState.style.display = 'none';
+            document.getElementById('selectAllCheckbox').checked = false;
+            
+            tbody.innerHTML = currentSpecs.map(spec => `
+                <tr>
+                    <td><input type="checkbox" class="spec-checkbox" value="${spec.id}" onchange="updateSelectedCount()"></td>
+                    <td>${spec.spec_number}</td>
+                    <td><strong>${spec.alloy_grade}</strong></td>
+                    <td>${spec.status}</td>
+                    <td>${spec.specification}</td>
+                    <td><span class="badge badge-category">${spec.test_category.name}</span></td>
+                    <td>${spec.sampling_direction}</td>
+                    <td>${spec.updated_at || '-'}</td>
+                    <td class="action-cell">
+                        <button class="btn btn-sm btn-info text-white" onclick="viewSpec(${spec.id})">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="editSpec(${spec.id})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSpec(${spec.id})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            updateSelectedCount();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/statistics');
+                const data = await res.json();
+                if (data.success) {
+                    const stats = data.data;
+                    document.getElementById('statsContainer').innerHTML = `
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <h2>${stats.total_count}</h2>
+                                <p>规范总数</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                <h2>${stats.alloy_grades}</h2>
+                                <p>合金牌号数</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                <h2>${stats.categories}</h2>
+                                <p>测试类别数</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error('加载统计失败:', e);
+            }
+        }
+
+        async function viewSpec(id) {
+            const spec = currentSpecs.find(s => s.id === id);
+            if (!spec) return;
+            
+            document.getElementById('modalTitle').textContent = '查看详情';
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('editBtn').textContent = '编辑';
+            document.getElementById('editBtn').onclick = function() { editSpec(id); };
+            
+            let html = `
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>编号：</strong>${spec.spec_number}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>牌号：</strong>${spec.alloy_grade}</div>
+                    <div class="col-md-6"><strong>状态：</strong>${spec.status}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>规格：</strong>${spec.specification}</div>
+                    <div class="col-md-6"><strong>类别：</strong>${spec.test_category.name}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>取样方向：</strong>${spec.sampling_direction}</div>
+                </div>
+                <hr>
+                <h6>性能指标</h6>
+                <div class="property-container">
+            `;
+            
+            const categoryCode = spec.test_category.code;
+            
+            // 获取字段定义的排序顺序
+            const fieldSortOrder = {};
+            const categoryFields = await loadCategoryFields(categoryCode);
+            if (categoryFields) {
+                categoryFields.forEach((field, index) => {
+                    fieldSortOrder[field.field_code] = field.sort_order || index;
+                });
+            }
+            
+            let orderedFields = [];
+            
+            const getFieldName = (fieldCode, defaultName) => {
+                if (defaultName && defaultName.trim()) {
+                    return defaultName;
+                }
+                if (categoryFields) {
+                    const fieldDef = categoryFields.find(f => f.field_code === fieldCode);
+                    if (fieldDef && fieldDef.field_name) {
+                        return fieldDef.field_name;
+                    }
+                }
+                return fieldCode;
+            };
+            
+            const formatValue = (value, fieldCode) => {
+                // 优先使用 value 中的 unit，如果没有则使用字段定义中的默认 unit
+                let unit = value.unit || '';
+                if (!unit && fieldCode && categoryFields) {
+                    const fieldDef = categoryFields.find(f => f.field_code === fieldCode);
+                    if (fieldDef && fieldDef.unit) {
+                        unit = fieldDef.unit;
+                    }
+                }
+                
+                // 特殊处理试验温度（温度类别 + 温度值）
+                // 支持两种格式：1) comparison 字段存储温度类别 2) value 字段直接是"室温"
+                if (value.comparison && ['室温', '高温', '低温'].includes(value.comparison)) {
+                    if (value.value !== undefined && value.value !== null) {
+                        return { value: `${value.comparison} (${value.value})`, unit: unit };
+                    }
+                    return { value: value.comparison, unit: unit };
+                }
+                
+                // 处理 value 直接是"室温"的情况
+                if (value.value && ['室温', '常温'].includes(value.value)) {
+                    return { value: value.value, unit: unit };
+                }
+                
+                // 处理余量元素
+                if (value.comparison === '余量' || value.comparison === 'Rem') {
+                    return { value: '余量', unit: unit };
+                }
+                
+                // 有 comparison 的情况（≥、≤、= 等）
+                if (value.comparison) {
+                    let valueStr = '';
+                    if (value.min_value !== undefined && value.min_value !== null) {
+                        valueStr = `${value.comparison}${value.min_value}`;
+                        if (value.max_value !== undefined && value.max_value !== null) {
+                            valueStr = `${value.min_value}~${value.max_value}`;
+                        }
+                    } else if (value.max_value !== undefined && value.max_value !== null) {
+                        valueStr = `${value.comparison}${value.max_value}`;
+                    } else if (value.value !== undefined && value.value !== null) {
+                        valueStr = `${value.comparison}${value.value}`;
+                    } else if (value.string_value !== undefined && value.string_value !== null && value.string_value !== '') {
+                        valueStr = `${value.comparison}${value.string_value}`;
+                    }
+                    return valueStr ? { value: valueStr, unit: unit } : null;
+                }
+                
+                // comparison 为空的情况
+                if (value.min_value !== undefined && value.min_value !== null && 
+                    value.max_value !== undefined && value.max_value !== null) {
+                    // 同时有 min 和 max，显示范围（用短横线）
+                    return { value: `${value.min_value}-${value.max_value}`, unit: unit };
+                } else if (value.min_value !== undefined && value.min_value !== null) {
+                    return { value: value.min_value, unit: unit };
+                } else if (value.max_value !== undefined && value.max_value !== null) {
+                    return { value: value.max_value, unit: unit };
+                } else if (value.value !== undefined && value.value !== null) {
+                    return { value: value.value, unit: unit };
+                } else if (value.string_value !== undefined && value.string_value !== null && value.string_value !== '') {
+                    return { value: value.string_value, unit: '' };
+                }
+                
+                return null;
+            };
+            
+            // 根据字段定义的 sort_order 排序，排除 test_temperature 字段（已移至试验条件区域）
+            const excludedFields = ['test_temperature'];
+            
+            if (categoryCode === 'tension') {
+                // 拉伸类别保留特殊排序逻辑（向后兼容）
+                const tensionOrder = ['test_temperature', 'tensile_strength', 'yield_strength', 'proof_strength', 'upper_yield_strength', 'lower_yield_strength', 'elongation_5d', 'elongation_4d', 'elongation', 'reduction_of_area'];
+                const existingFields = Object.keys(spec.test_values).filter(f => !excludedFields.includes(f));
+                
+                // 如果数据库中有自定义排序，优先使用数据库排序
+                if (Object.keys(fieldSortOrder).length > 0) {
+                    const fieldsWithOrder = [];
+                    for (const [fieldCode, value] of Object.entries(spec.test_values)) {
+                        // 跳过排除的字段
+                        if (excludedFields.includes(fieldCode)) continue;
+                        
+                        const formattedValue = formatValue(value, fieldCode);
+                        if (formattedValue) {
+                            fieldsWithOrder.push({ 
+                                field_name: getFieldName(fieldCode, value.field_name), 
+                                field_code: fieldCode,
+                                value: formattedValue.value,
+                                unit: formattedValue.unit,
+                                sort_order: fieldSortOrder[fieldCode] !== undefined ? fieldSortOrder[fieldCode] : 999
+                            });
+                        }
+                    }
+                    fieldsWithOrder.sort((a, b) => a.sort_order - b.sort_order);
+                    orderedFields = fieldsWithOrder;
+                } else {
+                    // 否则使用默认的 tensionOrder（排除 test_temperature）
+                    const filteredTensionOrder = tensionOrder.filter(f => !excludedFields.includes(f));
+                    for (const fieldCode of filteredTensionOrder) {
+                        if (existingFields.includes(fieldCode) && spec.test_values[fieldCode]) {
+                            const value = spec.test_values[fieldCode];
+                            const formattedValue = formatValue(value, fieldCode);
+                            if (formattedValue) {
+                                orderedFields.push({ 
+                                    field_name: getFieldName(fieldCode, value.field_name), 
+                                    field_code: fieldCode,
+                                    value: formattedValue.value,
+                                    unit: formattedValue.unit
+                                });
+                            }
+                        }
+                    }
+                    for (const fieldCode of existingFields) {
+                        if (!filteredTensionOrder.includes(fieldCode) && spec.test_values[fieldCode]) {
+                            const value = spec.test_values[fieldCode];
+                            const formattedValue = formatValue(value, fieldCode);
+                            if (formattedValue) {
+                                orderedFields.push({ 
+                                    field_name: getFieldName(fieldCode, value.field_name), 
+                                    field_code: fieldCode,
+                                    value: formattedValue.value,
+                                    unit: formattedValue.unit
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 其他类别按 sort_order 排序，排除 test_temperature
+                const fieldsWithOrder = [];
+                for (const [fieldCode, value] of Object.entries(spec.test_values)) {
+                    // 跳过排除的字段
+                    if (excludedFields.includes(fieldCode)) continue;
+                    
+                    const formattedValue = formatValue(value, fieldCode);
+                    if (formattedValue) {
+                        fieldsWithOrder.push({ 
+                            field_name: getFieldName(fieldCode, value.field_name), 
+                            field_code: fieldCode,
+                            value: formattedValue.value,
+                            unit: formattedValue.unit,
+                            sort_order: fieldSortOrder[fieldCode] !== undefined ? fieldSortOrder[fieldCode] : 999
+                        });
+                    }
+                }
+                fieldsWithOrder.sort((a, b) => a.sort_order - b.sort_order);
+                orderedFields = fieldsWithOrder;
+            }
+            
+            // 收集所有 experimental_conditions
+            const allExperimentalConditions = new Set();
+            for (const [fieldCode, value] of Object.entries(spec.test_values)) {
+                if (value && value.experimental_conditions) {
+                    for (const [key, val] of Object.entries(value.experimental_conditions)) {
+                        if (val) {
+                            allExperimentalConditions.add(`${key}: ${val}`);
+                        }
+                    }
+                }
+            }
+            
+            // 显示试验条件
+            if (allExperimentalConditions.size > 0) {
+                html += `<hr><h6><i class="bi bi-thermometer-half"></i> 试验条件</h6><div class="property-container mb-3">`;
+                for (const condition of allExperimentalConditions) {
+                    const [key, val] = condition.split(': ');
+                    html += `
+                        <div class="property-card" style="border-left-color: #e53e3e;">
+                            <div class="property-name">${key}</div>
+                            <div class="property-value">${val}</div>
+                        </div>
+                    `;
+                }
+                html += `</div><hr><h6>性能指标</h6><div class="property-container">`;
+            } else {
+                html += `<hr><h6>性能指标</h6><div class="property-container">`;
+            }
+            
+            for (const field of orderedFields) {
+                let displayUnit = field.unit || '';
+                let displayValue = field.value;
+                
+                // 特殊处理断裂韧度单位：将各种格式转换为标准格式
+                if (categoryCode === 'fracture_toughness' && displayUnit) {
+                    displayUnit = displayUnit.replace(/MPa·√m/g, 'MPa·m<sup>-1/2</sup>')
+                                            .replace(/MPa√m/g, 'MPa·m<sup>-1/2</sup>')
+                                            .replace(/MPa·m⁻¹\/²/g, 'MPa·m<sup>-1/2</sup>')
+                                            .replace(/MPa·m\^?-1\/2/g, 'MPa·m<sup>-1/2</sup>')
+                                            .replace(/MPa\s*m\^?-1\/2/g, 'MPa·m<sup>-1/2</sup>')
+                                            .replace(/MPa·m/g, 'MPa·m');
+                }
+                
+                // 获取当前字段的 experimental_conditions
+                let expConditionsHtml = '';
+                if (spec.test_values[field.field_code] && spec.test_values[field.field_code].experimental_conditions) {
+                    const expCond = spec.test_values[field.field_code].experimental_conditions;
+                    const conditions = Object.entries(expCond).filter(([k, v]) => v).map(([k, v]) => `${k}: ${v}`);
+                    if (conditions.length > 0) {
+                        expConditionsHtml = `<div style="font-size: 10px; color: #718096; margin-top: 2px;">[${conditions.join(', ')}]</div>`;
+                    }
+                }
+                
+                html += `
+                    <div class="property-card">
+                        <div class="property-name">${field.field_name}</div>
+                        <div class="property-unit">${displayUnit}</div>
+                        <div class="property-value">${displayValue}</div>
+                        ${expConditionsHtml}
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            
+            if (spec.additional_conditions) {
+                let conditionsHtml = '';
+                if (typeof spec.additional_conditions === 'object') {
+                    for (const [key, value] of Object.entries(spec.additional_conditions)) {
+                        if (value) {
+                            const labelMap = {
+                                'heat_treatment': '热处理工艺',
+                                'surface_condition': '表面状态',
+                                'test_standard': '试验标准'
+                            };
+                            conditionsHtml += `<div class="mb-2"><strong>${labelMap[key] || key}：</strong>${value}</div>`;
+                        }
+                    }
+                } else {
+                    conditionsHtml = spec.additional_conditions;
+                }
+                if (conditionsHtml) {
+                    html += `<hr><div class="mb-3">${conditionsHtml}</div>`;
+                }
+            }
+            
+            if (spec.remarks) {
+                html += `<hr><div class="mb-3"><strong>备注：</strong>${spec.remarks}</div>`;
+            }
+            
+            document.getElementById('modalBody').innerHTML = html;
+            modal.show();
+        }
+
+        async function editSpec(id) {
+            const spec = currentSpecs.find(s => s.id === id);
+            if (!spec) return;
+            
+            modal.hide();
+            showPage('add');
+            document.querySelector('.nav-link[data-page="add"]').click();
+            
+            setTimeout(() => {
+                document.querySelector('input[name="material_spec_number"]').value = spec.spec_number;
+                document.querySelector('select[name="test_category_code"]').value = spec.test_category.code;
+                document.querySelector('input[name="alloy_grade"]').value = spec.alloy_grade;
+                document.querySelector('input[name="status"]').value = spec.status;
+                document.querySelector('input[name="specification"]').value = spec.specification;
+                document.querySelector('select[name="sampling_direction"]').value = spec.sampling_direction;
+                
+                if (spec.additional_conditions && typeof spec.additional_conditions === 'object') {
+                    const heatTreatment = spec.additional_conditions.heat_treatment || '';
+                    document.querySelector('input[name="additional_conditions[heat_treatment]"]').value = heatTreatment;
+                }
+                
+                loadTestFields(spec.test_category.code, 'testFieldsContainer', spec.test_values);
+                
+                // loadTestFields 后再设置试验条件值（因为它会重新生成输入框）
+                setTimeout(() => {
+                    // 从任意一个 test_value 中提取 experimental_conditions
+                    const firstTestValue = Object.values(spec.test_values)[0];
+                    const expConditions = firstTestValue?.experimental_conditions || {};
+                    
+                    if (expConditions.temperature) {
+                        const tempSelect = document.getElementById('exp_condition_temperature');
+                        if (tempSelect) {
+                            tempSelect.value = expConditions.temperature;
+                        }
+                    }
+                    if (expConditions.stress) {
+                        const stressInput = document.getElementById('exp_condition_stress');
+                        if (stressInput) {
+                            stressInput.value = expConditions.stress;
+                        }
+                    }
+                    if (expConditions.test_time) {
+                        const timeInput = document.getElementById('exp_condition_test_time');
+                        if (timeInput) {
+                            timeInput.value = expConditions.test_time;
+                        }
+                    }
+                    if (expConditions.other_conditions) {
+                        const otherInput = document.getElementById('exp_condition_other');
+                        if (otherInput) {
+                            otherInput.value = expConditions.other_conditions;
+                        }
+                    }
+                    if (expConditions.strain) {
+                        const strainInput = document.getElementById('exp_condition_strain');
+                        if (strainInput) {
+                            strainInput.value = expConditions.strain;
+                        }
+                    }
+                    if (expConditions.speed) {
+                        const speedInput = document.getElementById('exp_condition_speed');
+                        if (speedInput) {
+                            speedInput.value = expConditions.speed;
+                        }
+                    }
+                }, 50);
+                
+                currentEditId = id;
+            }, 300);
+        }
+
+        async function deleteSpec(id) {
+            if (!confirm('确定要删除这条规范吗？')) return;
+            
+            try {
+                const res = await fetch(`/api/specs/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('删除成功');
+                    loadSpecs();
+                    loadStats();
+                } else {
+                    alert('删除失败: ' + data.error);
+                }
+            } catch (e) {
+                alert('删除失败');
+            }
+        }
+        
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.spec-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            updateSelectedCount();
+        }
+        
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.spec-checkbox:checked');
+            const count = checkboxes.length;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('batchDeleteBtn').style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        
+        async function batchDeleteSpecs() {
+            const checkboxes = document.querySelectorAll('.spec-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('请选择要删除的记录');
+                return;
+            }
+            
+            if (!confirm(`确定要删除选中的 ${checkboxes.length} 条规范吗？`)) return;
+            
+            const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const id of ids) {
+                try {
+                    const res = await fetch(`/api/specs/${id}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (e) {
+                    failCount++;
+                }
+            }
+            
+            if (failCount === 0) {
+                alert(`成功删除 ${successCount} 条记录`);
+            } else {
+                alert(`删除完成：成功 ${successCount} 条，失败 ${failCount} 条`);
+            }
+            
+            loadSpecs();
+            loadStats();
+        }
+
+        async function loadTestFields(categoryCode, containerId, existingValues = {}) {
+            if (!categoryCode) {
+                document.getElementById(containerId).innerHTML = '<p class="text-muted">请先选择类别</p>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/category/${categoryCode}`);
+                const data = await res.json();
+                if (!data.success) return;
+                
+                const category = data.data;
+                let fields = [...category.fields];
+                
+                if (categoryCode === 'tension') {
+                    const tensionOrder = ['test_temperature', 'tensile_strength', 'yield_strength', 'proof_strength', 'upper_yield_strength', 'lower_yield_strength', 'elongation_5d', 'elongation_4d', 'elongation', 'reduction_of_area'];
+                    fields.sort((a, b) => {
+                        const aIndex = tensionOrder.indexOf(a.field_code);
+                        const bIndex = tensionOrder.indexOf(b.field_code);
+                        if (aIndex === -1 && bIndex === -1) return 0;
+                        if (aIndex === -1) return 1;
+                        if (bIndex === -1) return -1;
+                        return aIndex - bIndex;
+                    });
+                }
+                
+                // 试验条件约束配置（按照 DATA_STRUCTURE.md）
+                const expConditionConfig = {
+                    chemical_composition: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    tension: { allowed: ['temperature', 'other_conditions'], required: ['temperature'], disabled: ['stress', 'test_time', 'strain', 'speed'] },
+                    impact: { allowed: ['temperature', 'other_conditions'], required: ['temperature'], disabled: ['stress', 'test_time', 'strain', 'speed'] },
+                    stress_rupture: { allowed: ['temperature', 'stress', 'test_time', 'other_conditions'], required: ['temperature', 'stress', 'test_time'], disabled: ['strain', 'speed'] },
+                    creep: { allowed: ['temperature', 'stress', 'test_time', 'other_conditions'], required: ['temperature', 'stress', 'test_time'], disabled: ['strain', 'speed'] },
+                    hardness: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    fracture_toughness: { allowed: ['temperature', 'other_conditions'], required: ['temperature'], disabled: ['stress', 'test_time', 'strain', 'speed'] },
+                    macro_structure: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    fracture_inspection: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    grain_size: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    non_metallic_inclusion: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    microstructure: { allowed: ['other_conditions'], required: [], disabled: ['temperature', 'stress', 'test_time', 'strain', 'speed'] },
+                    high_cycle_fatigue: { allowed: ['temperature', 'stress', 'strain', 'other_conditions'], required: ['temperature'], disabled: ['test_time', 'speed'] },
+                    low_cycle_fatigue: { allowed: ['temperature', 'stress', 'strain', 'other_conditions'], required: ['temperature'], disabled: ['test_time', 'speed'] },
+                    rotary_bending_fatigue: { allowed: ['temperature', 'stress', 'speed', 'other_conditions'], required: ['temperature', 'stress', 'speed'], disabled: ['strain'] }
+                };
+                
+                const fieldLabels = {
+                    temperature: '温度',
+                    stress: '应力',
+                    test_time: '试验时间',
+                    strain: '应变',
+                    speed: '转速',
+                    other_conditions: '其他条件'
+                };
+                
+                const fieldPlaceholders = {
+                    temperature: '如: 室温、-40℃、500℃',
+                    stress: '如: 500 MPa',
+                    test_time: '如: 100h',
+                    strain: '如: 0.5%',
+                    speed: '如: 3000 rpm',
+                    other_conditions: '其他试验条件'
+                };
+                
+                const config = expConditionConfig[categoryCode] || { allowed: ['temperature', 'stress', 'test_time', 'strain', 'speed', 'other_conditions'], required: [], disabled: [] };
+                
+                // 生成动态的试验条件输入框
+                let expConditionsHtml = '<div class="row g-2">';
+                const allFields = ['temperature', 'stress', 'test_time', 'strain', 'speed', 'other_conditions'];
+                
+                for (const field of allFields) {
+                    const isAllowed = config.allowed.includes(field);
+                    const isRequired = config.required.includes(field);
+                    
+                    if (isAllowed) {
+                        // 允许的字段，可编辑
+                        expConditionsHtml += `
+                            <div class="col-md-3">
+                                <label class="form-label" style="font-size: 12px;">${fieldLabels[field]}${isRequired ? ' *' : ''}</label>
+                                <input type="text" class="form-control form-control-sm" id="exp_condition_${field}" placeholder="${fieldPlaceholders[field]}${isRequired ? ' (必填)' : ''}">
+                            </div>
+                        `;
+                    }
+                    // 禁用的字段不显示
+                }
+                expConditionsHtml += '</div>';
+                
+                let html = `
+                    <div class="card mb-3" style="background: #fff5f5; border: 1px solid #fed7d7;">
+                        <div class="card-body py-2">
+                            <h6 class="text-danger mb-2"><i class="bi bi-thermometer-half"></i> 试验条件</h6>
+                            ${expConditionsHtml}
+                        </div>
+                    </div>
+                `;
+                
+                html += '<h6 class="text-primary mb-2">性能指标</h6><div class="property-container">';
+                
+                // 排除 test_temperature 字段（已移至试验条件区域）
+                const filteredFields = fields.filter(f => f.field_code !== 'test_temperature');
+                
+                filteredFields.forEach(field => {
+                    const existing = existingValues[field.field_code] || {};
+                    let inputHtml = '';
+                    
+                    if (field.field_type === 'range') {
+                        inputHtml = `
+                            <div class="row g-1">
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" name="test_values[${field.field_code}][comparison]">
+                                        <option value="">无</option>
+                                        <option value="≥" ${existing.comparison === '≥' ? 'selected' : ''}>≥</option>
+                                        <option value="≤" ${existing.comparison === '≤' ? 'selected' : ''}>≤</option>
+                                        <option value="=" ${existing.comparison === '=' ? 'selected' : ''}>=</option>
+                                        <option value="余量" ${existing.comparison === '余量' ? 'selected' : ''}>余量</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][min_value]" 
+                                        placeholder="最小值" value="${existing.min_value !== undefined && existing.min_value !== null ? existing.min_value : ''}">
+                                </div>
+                                <div class="col-auto">
+                                    <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][max_value]" 
+                                        placeholder="最大值" value="${existing.max_value !== undefined && existing.max_value !== null ? existing.max_value : ''}">
+                                </div>
+                                <div class="col-auto">
+                                    <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][unit]" 
+                                        placeholder="单位" value="${existing.unit || field.unit || ''}" style="width: 70px;">
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        inputHtml = `
+                            <div class="row g-1">
+                                <div class="col-auto">
+                                    <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][value]" 
+                                        placeholder="${field.description || field.field_name}" value="${existing.value || ''}">
+                                </div>
+                                <div class="col-auto">
+                                    <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][unit]" 
+                                        placeholder="单位" value="${existing.unit || field.unit || ''}" style="width: 70px;">
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // 解析已存在的 item_key
+                    let existingItemKey = '';
+                    if (existing.item_key) {
+                        if (typeof existing.item_key === 'string') {
+                            try {
+                                existingItemKey = JSON.parse(existing.item_key).join(', ');
+                            } catch (e) {
+                                existingItemKey = existing.item_key;
+                            }
+                        } else if (Array.isArray(existing.item_key)) {
+                            existingItemKey = existing.item_key.join(', ');
+                        }
+                    }
+                    
+                    html += `
+                        <div class="property-card">
+                            <div class="property-name">${field.field_name}${field.is_required ? ' *' : ''}</div>
+                            <div class="property-value" style="margin-top: 5px;">${inputHtml}</div>
+                            <div class="mt-2">
+                                <input type="text" class="form-control form-control-sm" name="test_values[${field.field_code}][item_key]" 
+                                    placeholder="项目关键字(如:高温,抗拉)" value="${existingItemKey}" style="max-width: 300px;">
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById(containerId).innerHTML = html;
+            } catch (e) {
+                console.error('加载字段失败:', e);
+            }
+        }
+
+        function showAddModal() {
+            showPage('add');
+            document.querySelector('.nav-link[data-page="add"]').click();
+            document.getElementById('addSpecForm').reset();
+            document.getElementById('testFieldsContainer').innerHTML = '<p class="text-muted">请先选择类别</p>';
+            currentEditId = null;
+        }
+
+        async function saveSpec() {
+            const form = document.getElementById('addSpecForm');
+            const formData = new FormData(form);
+            
+            const data = {
+                material_spec_number: formData.get('material_spec_number'),
+                test_category_code: formData.get('test_category_code'),
+                alloy_grade: formData.get('alloy_grade'),
+                status: formData.get('status'),
+                specification: formData.get('specification'),
+                sampling_direction: formData.get('sampling_direction'),
+                test_values: {}
+            };
+            
+            // 收集试验条件
+            const experimental_conditions = {};
+            const expTemp = document.getElementById('exp_condition_temperature')?.value;
+            const expStress = document.getElementById('exp_condition_stress')?.value;
+            const expTime = document.getElementById('exp_condition_test_time')?.value;
+            const expStrain = document.getElementById('exp_condition_strain')?.value;
+            const expSpeed = document.getElementById('exp_condition_speed')?.value;
+            const expOther = document.getElementById('exp_condition_other')?.value;
+            
+            if (expTemp) experimental_conditions.temperature = expTemp;
+            if (expStress) experimental_conditions.stress = expStress;
+            if (expTime) experimental_conditions.test_time = expTime;
+            if (expStrain) experimental_conditions.strain = expStrain;
+            if (expSpeed) experimental_conditions.speed = expSpeed;
+            if (expOther) experimental_conditions.other_conditions = expOther;
+            
+            const fields = document.querySelectorAll('#testFieldsContainer [name^="test_values["]');
+            fields.forEach(field => {
+                const match = field.name.match(/test_values\[(.*?)\]\[(.*?)\]/);
+                if (match) {
+                    const [, fieldCode, prop] = match;
+                    if (!data.test_values[fieldCode]) {
+                        data.test_values[fieldCode] = {};
+                    }
+                    // 收集所有有值的字段，即使是空字符串也要收集
+                    if (field.value !== undefined && field.value !== null) {
+                        // 特殊处理试验温度的类别字段
+                        if (prop === 'temp_category') {
+                            data.test_values[fieldCode]['comparison'] = field.value;
+                        } else if (prop === 'item_key') {
+                            // 项目关键字：转换为逗号分隔的字符串
+                            data.test_values[fieldCode][prop] = field.value.trim();
+                        } else if (prop === 'unit') {
+                            // 保存单位字段
+                            data.test_values[fieldCode][prop] = field.value;
+                        } else {
+                            data.test_values[fieldCode][prop] = prop === 'min_value' || prop === 'max_value' ? 
+                                parseFloat(field.value) : field.value;
+                        }
+                    }
+                }
+            });
+            
+            // 为每个 test_value 添加 experimental_conditions
+            if (Object.keys(experimental_conditions).length > 0) {
+                if (Object.keys(data.test_values).length > 0) {
+                    // 有性能指标，为每个字段添加试验条件
+                    for (const fieldCode of Object.keys(data.test_values)) {
+                        data.test_values[fieldCode].experimental_conditions = { ...experimental_conditions };
+                    }
+                } else {
+                    // 没有性能指标，但有试验条件，创建一个占位字段用于保存试验条件
+                    data.test_values['_experimental_conditions_placeholder'] = {
+                        experimental_conditions: { ...experimental_conditions }
+                    };
+                }
+            }
+            
+            try {
+                let url = '/api/specs';
+                let method = 'POST';
+                
+                if (currentEditId) {
+                    url = `/api/specs/${currentEditId}`;
+                    method = 'PUT';
+                }
+                
+                console.log('发送的数据:', JSON.stringify(data, null, 2));
+                
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                console.log('服务器响应:', result);
+                if (result.success) {
+                    alert(currentEditId ? '更新成功' : '保存成功');
+                    showPage('list');
+                    loadSpecs();
+                    loadStats();
+                    form.reset();
+                    currentEditId = null;
+                } else {
+                    alert('保存失败: ' + result.error);
+                }
+            } catch (e) {
+                alert('保存失败');
+            }
+        }
+
+        async function parseImage() {
+            const fileInput = document.getElementById('imageInput');
+            const imagePreview = document.getElementById('imagePreview');
+            const categoryCode = document.getElementById('importCategorySelect').value;
+            const statusDiv = document.getElementById('parseStatus');
+            
+            if (!fileInput.files[0] && !imagePreview.src) {
+                alert('请选择图片或从粘贴板粘贴图片');
+                return;
+            }
+            
+            statusDiv.innerHTML = '<div class="loading"></div> 正在识别，请稍候...';
+            
+            if (fileInput.files[0]) {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                if (categoryCode) {
+                    formData.append('test_category_code', categoryCode);
+                }
+                
+                try {
+                    const res = await fetch('/api/parse-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await res.json();
+                    statusDiv.innerHTML = '';
+                    
+                    if (data.success && data.data.length > 0) {
+                        parsedData = data.data;
+                        document.getElementById('parseResult').value = JSON.stringify(data.data, null, 2);
+                        console.log('API返回数据:', data);
+                        const timeInfo = data.elapsed ? `（耗时 ${data.elapsed}秒）` : '';
+                        statusDiv.innerHTML = '<span class="text-success">识别成功！共提取 ' + data.data.length + ' 条数据' + timeInfo + '</span>';
+                    } else {
+                        console.log('识别失败，返回数据:', data);
+                        const errorMsg = data.error ? `：${data.error}` : (data.debug ? `（调试: ${JSON.stringify(data.debug)}）` : '');
+                        statusDiv.innerHTML = '<span class="text-warning">未能识别到数据' + errorMsg + '，请尝试调整图片或选择正确的类别</span>';
+                        parsedData = [];
+                    }
+                } catch (e) {
+                    statusDiv.innerHTML = '<span class="text-danger">识别失败: ' + e.message + '</span>';
+                }
+            } else if (imagePreview.src && imagePreview.src.startsWith('data:image')) {
+                const base64Data = imagePreview.src.split(',')[1];
+                
+                try {
+                    const res = await fetch('/api/parse-image-base64', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_data: base64Data,
+                            test_category_code: categoryCode
+                        })
+                    });
+                    
+                    const data = await res.json();
+                    statusDiv.innerHTML = '';
+                    
+                    if (data.success && data.data.length > 0) {
+                        parsedData = data.data;
+                        document.getElementById('parseResult').value = JSON.stringify(data.data, null, 2);
+                        console.log('API返回数据:', data);
+                        const timeInfo = data.elapsed ? `（耗时 ${data.elapsed}秒）` : '';
+                        statusDiv.innerHTML = '<span class="text-success">识别成功！共提取 ' + data.data.length + ' 条数据' + timeInfo + '</span>';
+                    } else {
+                        console.log('识别失败，返回数据:', data);
+                        const errorMsg = data.error ? `：${data.error}` : (data.debug ? `（调试: ${JSON.stringify(data.debug)}）` : '');
+                        statusDiv.innerHTML = '<span class="text-warning">未能识别到数据' + errorMsg + '，请尝试调整图片或选择正确的类别</span>';
+                        parsedData = [];
+                    }
+                } catch (e) {
+                    statusDiv.innerHTML = '<span class="text-danger">识别失败: ' + e.message + '</span>';
+                }
+            } else {
+                alert('请选择图片或从粘贴板粘贴图片');
+            }
+        }
+        
+        function clearImage() {
+            document.getElementById('imageInput').value = '';
+            document.getElementById('imagePreview').src = '';
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('pastePlaceholder').style.display = 'block';
+            document.getElementById('parseResult').value = '';
+            document.getElementById('parseStatus').innerHTML = '';
+            document.getElementById('importSpecNumber').value = '';
+            document.getElementById('importAlloyGrade').value = '';
+            parsedData = [];
+        }
+        
+        function focusPasteInput() {
+            document.getElementById('pasteInput').focus();
+        }
+
+        function editParsedData() {
+            try {
+                const content = document.getElementById('parseResult').value;
+                parsedData = JSON.parse(content);
+                alert('数据已更新');
+            } catch (e) {
+                alert('JSON格式错误');
+            }
+        }
+
+        async function importParsedData() {
+            if (parsedData.length === 0) {
+                try {
+                    parsedData = JSON.parse(document.getElementById('parseResult').value);
+                } catch (e) {
+                    alert('请先识别图片或输入有效的JSON数据');
+                    return;
+                }
+            }
+            
+            const userSpecNumber = document.getElementById('importSpecNumber').value.trim();
+            const userAlloyGrade = document.getElementById('importAlloyGrade').value.trim();
+            
+            const processedSpecs = [];
+            for (const spec of parsedData) {
+                let alloyGrades = [];
+                if (userAlloyGrade) {
+                    alloyGrades = [userAlloyGrade];
+                } else if (spec.alloy_grade) {
+                    alloyGrades = spec.alloy_grade.split(/[,，]/).map(g => g.trim()).filter(g => g);
+                }
+                
+                if (alloyGrades.length > 0) {
+                    for (const grade of alloyGrades) {
+                        const newSpec = { ...spec };
+                        newSpec.alloy_grade = grade;
+                        if (userSpecNumber) {
+                            newSpec.material_spec_number = userSpecNumber;
+                        }
+                        if (!newSpec.material_spec_number) {
+                            newSpec.material_spec_number = '-';
+                        }
+                        if (!newSpec.status) {
+                            newSpec.status = '-';
+                        }
+                        if (!newSpec.specification) {
+                            newSpec.specification = '-';
+                        }
+                        if (!newSpec.sampling_direction) {
+                            newSpec.sampling_direction = '-';
+                        }
+                        processedSpecs.push(newSpec);
+                    }
+                } else {
+                    if (userSpecNumber) {
+                        spec.material_spec_number = userSpecNumber;
+                    }
+                    if (!spec.material_spec_number) {
+                        spec.material_spec_number = '-';
+                    }
+                    if (!spec.status) {
+                        spec.status = '-';
+                    }
+                    if (!spec.specification) {
+                        spec.specification = '-';
+                    }
+                    if (!spec.sampling_direction) {
+                        spec.sampling_direction = '-';
+                    }
+                    processedSpecs.push(spec);
+                }
+            }
+            
+            try {
+                const res = await fetch('/api/batch-import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ specs: processedSpecs })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    let msg = `成功导入 ${data.imported_count} 条数据`;
+                    if (data.skipped_count > 0) {
+                        msg += `，${data.skipped_count} 条重复已跳过`;
+                    }
+                    if (data.errors.length > 0) {
+                        msg += `，${data.errors.length} 条失败`;
+                    }
+                    alert(msg);
+                    if (data.imported_count > 0) {
+                        showPage('list');
+                        loadSpecs();
+                        loadStats();
+                        parsedData = [];
+                        document.getElementById('parseResult').value = '';
+                        document.getElementById('imageInput').value = '';
+                        document.getElementById('imagePreview').style.display = 'none';
+                        document.getElementById('importSpecNumber').value = '';
+                        document.getElementById('importAlloyGrade').value = '';
+                        document.getElementById('pastePlaceholder').style.display = 'block';
+                        document.getElementById('parseStatus').innerHTML = '';
+                    }
+                } else {
+                    alert('导入失败: ' + data.error);
+                }
+            } catch (e) {
+                alert('导入失败');
+            }
+        }
+
+        // 字段管理相关函数
+        let categoryModal = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+        });
+
+        async function loadCategoriesForAdmin() {
+            try {
+                const res = await fetch('/api/admin/categories');
+                const data = await res.json();
+                if (data.success) {
+                    window.allCategories = data.data;
+                    renderCategoryButtons(data.data);
+                    renderCategories(data.data);
+                }
+            } catch (e) {
+                console.error('加载类别失败:', e);
+            }
+        }
+        
+        function renderCategoryButtons(categories) {
+            const filterContainer = document.getElementById('categoryFilter');
+            filterContainer.innerHTML = '<button class="btn btn-primary me-2" onclick="filterCategory(\'all\')">全部</button>';
+            
+            categories.forEach(category => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline-secondary me-2';
+                btn.textContent = category.name;
+                btn.onclick = () => filterCategory(category.id);
+                filterContainer.appendChild(btn);
+            });
+        }
+        
+        function filterCategory(categoryId) {
+            if (categoryId === 'all') {
+                renderCategories(window.allCategories);
+            } else {
+                const category = window.allCategories.find(c => c.id === categoryId);
+                if (category) {
+                    renderCategories([category]);
+                }
+            }
+        }
+
+        function renderCategoryFields(category) {
+            const container = document.getElementById(`categoriesList-${category.id}`);
+            if (!container) return;
+            
+            container.innerHTML = '';
+            const categoryDiv = document.createElement('div');
+            categoryDiv.className = 'mb-4 p-4 border rounded';
+            
+            categoryDiv.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5>${category.name} <span class="badge bg-secondary">${category.code}</span></h5>
+                    <div>
+                        <button class="btn btn-sm btn-warning" onclick="editCategory(${category.id})">
+                            <i class="bi bi-pencil"></i> 编辑
+                        </button>
+                        <button class="btn btn-sm btn-danger ms-2" onclick="deleteCategory(${category.id})">
+                            <i class="bi bi-trash"></i> 删除
+                        </button>
+                    </div>
+                </div>
+                <p class="text-muted">${category.description || '无描述'}</p>
+                <div class="mt-3">
+                    <h6 class="text-primary">字段列表</h6>
+                    <table class="table table-sm mt-2">
+                        <thead>
+                            <tr>
+                                <th>字段名称</th>
+                                <th>字段代码</th>
+                                <th>字段类型</th>
+                                <th>单位</th>
+                                <th>排序</th>
+                                <th>必填</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${category.fields.map(field => `
+                                <tr>
+                                    <td>${field.field_name}</td>
+                                    <td>${field.field_code}</td>
+                                    <td>${field.field_type}</td>
+                                    <td>${field.unit || '-'}</td>
+                                    <td>${field.sort_order}</td>
+                                    <td>${field.is_required ? '是' : '否'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.appendChild(categoryDiv);
+        }
+
+        function renderCategories(categories) {
+            const container = document.getElementById('categoriesList');
+            container.innerHTML = '';
+
+            categories.forEach(category => {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'mb-4 p-4 border rounded';
+                
+                categoryDiv.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5>${category.name} <span class="badge bg-secondary">${category.code}</span></h5>
+                        <div>
+                            <button class="btn btn-sm btn-warning" onclick="editCategory(${category.id})">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <button class="btn btn-sm btn-danger ms-2" onclick="deleteCategory(${category.id})">
+                                <i class="bi bi-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-muted">${category.description || '无描述'}</p>
+                    <div class="mt-3">
+                        <h6 class="text-primary">字段列表</h6>
+                        <table class="table table-sm mt-2">
+                            <thead>
+                                <tr>
+                                    <th>字段名称</th>
+                                    <th>字段代码</th>
+                                    <th>字段类型</th>
+                                    <th>单位</th>
+                                    <th>排序</th>
+                                    <th>必填</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${category.fields.map(field => `
+                                    <tr>
+                                        <td>${field.field_name}</td>
+                                        <td>${field.field_code}</td>
+                                        <td>${field.field_type}</td>
+                                        <td>${field.unit || '-'}</td>
+                                        <td>${field.sort_order}</td>
+                                        <td>${field.is_required ? '是' : '否'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                container.appendChild(categoryDiv);
+            });
+        }
+
+        function showAddCategoryModal() {
+            document.getElementById('categoryId').value = '';
+            document.getElementById('categoryName').value = '';
+            document.getElementById('categoryCode').value = '';
+            document.getElementById('categoryDescription').value = '';
+            document.getElementById('fieldsContainer').innerHTML = `
+                <div class="field-item mb-3 p-3 border rounded">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label class="form-label">字段名称 *</label>
+                            <input type="text" class="form-control field-name" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">字段代码 *</label>
+                            <input type="text" class="form-control field-code" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">字段类型 *</label>
+                            <select class="form-select field-type" required>
+                                <option value="range">范围</option>
+                                <option value="string">字符串</option>
+                                <option value="number">数字</option>
+                                <option value="text">文本</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">单位</label>
+                            <input type="text" class="form-control field-unit">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">排序</label>
+                            <input type="number" class="form-control field-sort" value="0">
+                        </div>
+                        <div class="col-md-12 mt-2">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-control field-description">
+                        </div>
+                        <div class="col-md-12 mt-2">
+                            <div class="form-check">
+                                <input class="form-check-input field-required" type="checkbox">
+                                <label class="form-check-label">必填字段</label>
+                            </div>
+                        </div>
+                        <div class="col-md-12 mt-2 text-end">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeField(this)">
+                                <i class="bi bi-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('categoryModalTitle').textContent = '新增测试类别';
+            categoryModal.show();
+        }
+
+        function addFieldItem() {
+            const container = document.getElementById('fieldsContainer');
+            const newField = document.createElement('div');
+            newField.className = 'field-item mb-3 p-3 border rounded';
+            newField.innerHTML = `
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label">字段名称 *</label>
+                        <input type="text" class="form-control field-name" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">字段代码 *</label>
+                        <input type="text" class="form-control field-code" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">字段类型 *</label>
+                        <select class="form-select field-type" required>
+                            <option value="range">范围</option>
+                            <option value="string">字符串</option>
+                            <option value="number">数字</option>
+                            <option value="text">文本</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">单位</label>
+                        <input type="text" class="form-control field-unit">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">排序</label>
+                        <input type="number" class="form-control field-sort" value="0">
+                    </div>
+                    <div class="col-md-12 mt-2">
+                        <label class="form-label">描述</label>
+                        <input type="text" class="form-control field-description">
+                    </div>
+                    <div class="col-md-12 mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input field-required" type="checkbox">
+                            <label class="form-check-label">必填字段</label>
+                        </div>
+                    </div>
+                    <div class="col-md-12 mt-2 text-end">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeField(this)">
+                            <i class="bi bi-trash"></i> 删除
+                        </button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(newField);
+        }
+
+        function removeField(button) {
+            const fieldItem = button.closest('.field-item');
+            if (document.querySelectorAll('.field-item').length > 1) {
+                fieldItem.remove();
+            } else {
+                alert('至少需要一个字段');
+            }
+        }
+
+        async function saveCategory() {
+            const categoryId = document.getElementById('categoryId').value;
+            const name = document.getElementById('categoryName').value;
+            const code = document.getElementById('categoryCode').value;
+            const description = document.getElementById('categoryDescription').value;
+            
+            if (!name || !code) {
+                alert('请填写类别名称和代码');
+                return;
+            }
+            
+            const fieldItems = document.querySelectorAll('.field-item');
+            const fields = [];
+            
+            fieldItems.forEach((item, index) => {
+                const fieldName = item.querySelector('.field-name').value;
+                const fieldCode = item.querySelector('.field-code').value;
+                const fieldType = item.querySelector('.field-type').value;
+                const fieldUnit = item.querySelector('.field-unit').value;
+                const fieldSort = parseInt(item.querySelector('.field-sort').value) || index;
+                const fieldDescription = item.querySelector('.field-description').value;
+                const fieldRequired = item.querySelector('.field-required').checked;
+                
+                if (!fieldName || !fieldCode) {
+                    alert('请填写所有字段的名称和代码');
+                    throw new Error('字段信息不完整');
+                }
+                
+                fields.push({
+                    field_name: fieldName,
+                    field_code: fieldCode,
+                    field_type: fieldType,
+                    unit: fieldUnit,
+                    description: fieldDescription,
+                    is_required: fieldRequired,
+                    sort_order: fieldSort
+                });
+            });
+            
+            try {
+                let url = '/api/admin/categories';
+                let method = 'POST';
+                
+                if (categoryId) {
+                    url = `/api/admin/categories/${categoryId}`;
+                    method = 'PUT';
+                }
+                
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        code: code,
+                        description: description,
+                        fields: fields
+                    })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    alert('保存成功');
+                    categoryModal.hide();
+                    loadCategoriesForAdmin();
+                } else {
+                    alert('保存失败: ' + data.error);
+                }
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            }
+        }
+
+        async function editCategory(categoryId) {
+            try {
+                const res = await fetch('/api/admin/categories');
+                const data = await res.json();
+                if (data.success) {
+                    const category = data.data.find(c => c.id === categoryId);
+                    if (category) {
+                        document.getElementById('categoryId').value = category.id;
+                        document.getElementById('categoryName').value = category.name;
+                        document.getElementById('categoryCode').value = category.code;
+                        document.getElementById('categoryDescription').value = category.description || '';
+                        
+                        const container = document.getElementById('fieldsContainer');
+                        container.innerHTML = '';
+                        
+                        category.fields.forEach(field => {
+                            const fieldItem = document.createElement('div');
+                            fieldItem.className = 'field-item mb-3 p-3 border rounded';
+                            fieldItem.innerHTML = `
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <label class="form-label">字段名称 *</label>
+                                        <input type="text" class="form-control field-name" value="${field.field_name}" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">字段代码 *</label>
+                                        <input type="text" class="form-control field-code" value="${field.field_code}" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">字段类型 *</label>
+                                        <select class="form-select field-type" required>
+                                            <option value="range" ${field.field_type === 'range' ? 'selected' : ''}>范围</option>
+                                            <option value="string" ${field.field_type === 'string' ? 'selected' : ''}>字符串</option>
+                                            <option value="number" ${field.field_type === 'number' ? 'selected' : ''}>数字</option>
+                                            <option value="text" ${field.field_type === 'text' ? 'selected' : ''}>文本</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">单位</label>
+                                        <input type="text" class="form-control field-unit" value="${field.unit || ''}">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">排序</label>
+                                        <input type="number" class="form-control field-sort" value="${field.sort_order}">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <label class="form-label">描述</label>
+                                        <input type="text" class="form-control field-description" value="${field.description || ''}">
+                                    </div>
+                                    <div class="col-md-12 mt-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input field-required" type="checkbox" ${field.is_required ? 'checked' : ''}>
+                                            <label class="form-check-label">必填字段</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-12 mt-2 text-end">
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="removeField(this)">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                            container.appendChild(fieldItem);
+                        });
+                        
+                        document.getElementById('categoryModalTitle').textContent = '编辑测试类别';
+                        categoryModal.show();
+                    }
+                }
+            } catch (e) {
+                console.error('加载类别失败:', e);
+            }
+        }
+
+        async function deleteCategory(categoryId) {
+            if (!confirm('确定要删除这个测试类别吗？删除后相关数据将被清除。')) return;
+            
+            try {
+                const res = await fetch(`/api/admin/categories/${categoryId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('删除成功');
+                    loadCategoriesForAdmin();
+                } else {
+                    alert('删除失败: ' + data.error);
+                }
+            } catch (e) {
+                alert('删除失败');
+            }
+        }
+
+        function enableEdit() {
+            modal.hide();
+        }
+
+        let fieldMappingModal = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            fieldMappingModal = new bootstrap.Modal(document.getElementById('fieldMappingModal'));
+        });
+
+        async function loadFieldMappings() {
+            try {
+                const categoryCode = document.getElementById('fieldMappingFilterCategory').value;
+                const sourceField = document.getElementById('fieldMappingSearchSource').value;
+                const targetField = document.getElementById('fieldMappingSearchTarget').value;
+                
+                let url = '/api/admin/field-mappings?active_only=false&merge_sources=true';
+                if (categoryCode) {
+                    url += '&category_code=' + encodeURIComponent(categoryCode);
+                }
+                if (sourceField) {
+                    url += '&source_field=' + encodeURIComponent(sourceField);
+                }
+                if (targetField) {
+                    url += '&target_field_code=' + encodeURIComponent(targetField);
+                }
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.success) {
+                    renderFieldMappingsTable(data.data);
+                    document.getElementById('fieldMappingsCount').textContent = `共 ${data.data.length} 条映射`;
+                }
+            } catch (e) {
+                console.error('加载字段映射失败:', e);
+            }
+        }
+
+        function renderFieldMappingsTable(mappings) {
+            const tbody = document.getElementById('fieldMappingsTableBody');
+            if (!mappings || mappings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = mappings.map(mapping => {
+                const sourceFields = mapping.source_fields || (mapping.source_field ? [mapping.source_field] : []);
+                const sourceDisplay = sourceFields.map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join('');
+                return `
+                <tr>
+                    <td>${sourceDisplay}</td>
+                    <td><code>${mapping.target_field_code}</code></td>
+                    <td>${mapping.category_name || '通用'}</td>
+                    <td>${mapping.is_active ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="editFieldMapping(${mapping.id})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteFieldMapping(${mapping.id})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `}).join('');
+        }
+
+        async function showAddFieldMappingModal() {
+            document.getElementById('fieldMappingId').value = '';
+            document.getElementById('fieldMappingTargetField').value = '';
+            document.getElementById('fieldMappingIsActive').checked = true;
+            
+            await loadCategoriesForFieldMappingModal();
+            
+            document.getElementById('sourceFieldsContainer').innerHTML = `
+                <div class="input-group mb-2">
+                    <input type="text" class="form-control source-field-input" placeholder="源字段名">
+                    <button type="button" class="btn btn-outline-danger" onclick="removeSourceField(this)" style="display: none;">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('fieldMappingModalTitle').textContent = '新增字段映射';
+            fieldMappingModal.show();
+        }
+
+        async function loadCategoriesForFieldMappingModal() {
+            try {
+                const res = await fetch('/api/categories');
+                const data = await res.json();
+                if (data.success) {
+                    const options = data.data.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+                    document.getElementById('fieldMappingCategoryCode').innerHTML = '<option value="">通用（所有类别）</option>' + options;
+                    document.getElementById('fieldMappingFilterCategory').innerHTML = '<option value="">全部类别</option>' + options;
+                }
+            } catch (e) {
+                console.error('加载类别失败:', e);
+            }
+        }
+
+        async function editFieldMapping(mappingId) {
+            try {
+                const res = await fetch('/api/admin/field-mappings?active_only=false&merge_sources=true');
+                const data = await res.json();
+                if (data.success) {
+                    const mapping = data.data.find(m => m.id === mappingId);
+                    if (mapping) {
+                        document.getElementById('fieldMappingId').value = mapping.id;
+                        document.getElementById('fieldMappingTargetField').value = mapping.target_field_code;
+                        document.getElementById('fieldMappingIsActive').checked = mapping.is_active;
+                        
+                        await loadCategoriesForFieldMappingModal();
+                        document.getElementById('fieldMappingCategoryCode').value = mapping.category_code || '';
+                        
+                        const sourceFieldsContainer = document.getElementById('sourceFieldsContainer');
+                        sourceFieldsContainer.innerHTML = '';
+                        
+                        const sourceFields = mapping.source_fields || [mapping.source_field];
+                        sourceFields.forEach((sourceField, index) => {
+                            const div = document.createElement('div');
+                            div.className = 'input-group mb-2';
+                            div.innerHTML = `
+                                <input type="text" class="form-control source-field-input" value="${sourceField}" placeholder="源字段名">
+                                <button type="button" class="btn btn-outline-danger" onclick="removeSourceField(this)" ${index === 0 ? 'style="display: none;"' : ''}>
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            `;
+                            sourceFieldsContainer.appendChild(div);
+                        });
+                        
+                        document.getElementById('fieldMappingModalTitle').textContent = '编辑字段映射';
+                        fieldMappingModal.show();
+                    }
+                }
+            } catch (e) {
+                console.error('加载字段映射失败:', e);
+            }
+        }
+
+        async function saveFieldMapping() {
+            const mappingId = document.getElementById('fieldMappingId').value;
+            const target_field_code = document.getElementById('fieldMappingTargetField').value;
+            const category_code = document.getElementById('fieldMappingCategoryCode').value;
+            const is_active = document.getElementById('fieldMappingIsActive').checked;
+            
+            const sourceFieldInputs = document.querySelectorAll('.source-field-input');
+            const source_fields = Array.from(sourceFieldInputs)
+                .map(input => input.value.trim())
+                .filter(value => value);
+
+            if (source_fields.length === 0 || !target_field_code) {
+                alert('请填写源字段和目标字段代码');
+                return;
+            }
+
+            try {
+                let url = '/api/admin/field-mappings';
+                let method = 'POST';
+
+                if (mappingId) {
+                    url = `/api/admin/field-mappings/${mappingId}`;
+                    method = 'PUT';
+                }
+
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_fields: source_fields,
+                        target_field_code: target_field_code,
+                        category_code: category_code || null,
+                        is_active: is_active
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert('保存成功');
+                    fieldMappingModal.hide();
+                    loadFieldMappings();
+                } else {
+                    alert('保存失败：' + data.error);
+                }
+            } catch (e) {
+                alert('保存失败');
+            }
+        }
+
+        function addSourceField() {
+            const container = document.getElementById('sourceFieldsContainer');
+            const div = document.createElement('div');
+            div.className = 'input-group mb-2';
+            div.innerHTML = `
+                <input type="text" class="form-control source-field-input" placeholder="源字段名">
+                <button type="button" class="btn btn-outline-danger" onclick="removeSourceField(this)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+            container.appendChild(div);
+            
+            const inputs = container.querySelectorAll('.source-field-input');
+            if (inputs.length > 1) {
+                inputs[0].nextElementSibling.style.display = 'inline-block';
+            }
+        }
+
+        function removeSourceField(button) {
+            const container = document.getElementById('sourceFieldsContainer');
+            const inputs = container.querySelectorAll('.source-field-input');
+            
+            if (inputs.length <= 1) {
+                button.parentElement.remove();
+                
+                const newInputs = container.querySelectorAll('.source-field-input');
+                if (newInputs.length === 1) {
+                    newInputs[0].nextElementSibling.style.display = 'none';
+                }
+            } else {
+                button.parentElement.remove();
+            }
+        }
+
+        async function deleteFieldMapping(mappingId) {
+            if (!confirm('确定要删除这个字段映射吗？')) return;
+
+            try {
+                const res = await fetch(`/api/admin/field-mappings/${mappingId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('删除成功');
+                    loadFieldMappings();
+                } else {
+                    alert('删除失败：' + data.error);
+                }
+            } catch (e) {
+                alert('删除失败');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+[Unit]
+Description=Material Spec Database System
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yb
+Group=yb
+WorkingDirectory=/home/yb/trae_project/material_spec_db
+Environment="PATH=/home/yb/miniconda3/envs/material_spec/bin:/home/yb/miniconda3/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/yb/miniconda3/envs/material_spec/bin/python /home/yb/trae_project/material_spec_db/app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=material-spec
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

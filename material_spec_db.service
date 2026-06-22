@@ -1,0 +1,15 @@
+[Unit]
+Description=Material Spec Database API Service
+After=network.target
+
+[Service]
+Type=simple
+User=yb
+WorkingDirectory=/home/yb/material_spec_db
+Environment="PATH=/home/yb/anaconda3/envs/material_spec_db/bin"
+ExecStart=/home/yb/anaconda3/envs/material_spec_db/bin/python /home/yb/material_spec_db/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
