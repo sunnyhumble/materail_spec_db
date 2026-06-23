@@ -114,12 +114,158 @@ def _normalize_unit(unit, category_code):
     """规范化单位显示格式"""
     if not unit or not category_code:
         return unit
-    
+
     if category_code == 'fracture_toughness':
         unit = unit.replace('MPa√m', 'MPa·m⁻¹/²')
         unit = unit.replace('MPa·√m', 'MPa·m⁻¹/²')
-    
+
     return unit
+
+
+def _normalize_comparison(comparison):
+    """规范化比较符号：将 >=、<= 等替换为 ≥、≤
+
+    支持的写法：
+      >=  =>  →  ≥
+      <=  =<  →  ≤
+      HTML 实体 &gt;= &lt;= &ge; &le;
+      全角 ＞ ＜ ＞= ＜=
+    """
+    if comparison is None:
+        return comparison
+    comparison = str(comparison)
+    if not comparison:
+        return comparison
+
+    replacements = [
+        ('&gt;=', '≥'), ('&lt;=', '≤'),
+        ('&ge;', '≥'), ('&le;', '≤'),
+        ('＞=', '≥'), ('＜=', '≤'),
+        ('＞', '≥'), ('＜', '≤'),
+        ('>=', '≥'), ('=>', '≥'),
+        ('<=', '≤'), ('=<', '≤'),
+    ]
+    for old, new in replacements:
+        comparison = comparison.replace(old, new)
+    return comparison
+
+
+# 需要温度字段的测试类别（未填写时默认"室温"）
+_TEMPERATURE_REQUIRED_CATEGORIES = {
+    'tension', 'impact', 'stress_rupture', 'creep',
+    'fracture_toughness', 'high_cycle_fatigue', 'low_cycle_fatigue',
+    'rotary_bending_fatigue',
+}
+
+
+# 类别代码别名：把 LLM 输出的常见拼写错误映射到数据库中的正确代码
+_CATEGORY_CODE_ALIASES = {
+    'non_metallic_inclusions': 'non_metallic_inclusion',
+}
+
+
+def _normalize_category_code(category_code):
+    """规范化测试类别代码
+
+    将 LLM 输出的常见拼写变体映射到数据库定义的标准代码。
+    """
+    if not category_code:
+        return category_code
+    return _CATEGORY_CODE_ALIASES.get(category_code, category_code)
+
+
+# 含 description/text 字段的类别：超出字段值时聚合到该字段
+_TEXT_AGGREGATION_TARGETS = {
+    'non_metallic_inclusion': 'non_metallic_inclusion_description',
+    'macro_structure': 'macro_structure_description',
+    'grain_size': 'grain_size_description',
+    'microstructure': 'microstructure_description',
+    'fracture_inspection': 'fracture_inspection_description',
+}
+
+
+def _aggregate_orphan_fields(spec_data, field_map):
+    """将 test_values 中未匹配的字段聚合到该类别的 text 字段
+
+    场景：LLM 输出多个细分字段（如 inclusion_type_A_coarse、A_fine 等），
+    但数据库只定义了 requirement_description 一个 text 字段。
+    将这些 orphan 字段的键值拼接成描述文本，合并到目标 text 字段。
+
+    返回：是否发生了聚合（True/False）
+    """
+    if not isinstance(spec_data, dict):
+        return False
+
+    category_code = spec_data.get('test_category_code', '')
+    target_field = _TEXT_AGGREGATION_TARGETS.get(category_code)
+    if not target_field:
+        return False
+
+    test_values = spec_data.get('test_values')
+    if not isinstance(test_values, dict):
+        return False
+
+    orphan_lines = []
+    kept = {}
+    for field_code, value_data in test_values.items():
+        if field_code == '_experimental_conditions_placeholder':
+            kept[field_code] = value_data
+            continue
+        if field_code in field_map:
+            kept[field_code] = value_data
+            continue
+        # orphan field：只拼接内容，不带 field_code 前缀和 key=value 格式
+        if isinstance(value_data, dict):
+            parts = []
+            for k, v in value_data.items():
+                if k in ('experimental_conditions', 'item_key', 'unit', 'comparison'):
+                    continue
+                if v in (None, '', [], {}):
+                    continue
+                parts.append(str(v))
+            if parts:
+                orphan_lines.append("".join(parts))
+        elif value_data not in (None, '', []):
+            orphan_lines.append(str(value_data))
+
+    if not orphan_lines:
+        return False
+
+    # 合并到目标字段（已有内容则追加）
+    target_value = kept.get(target_field, {})
+    if not isinstance(target_value, dict):
+        target_value = {'value': str(target_value) if target_value else ''}
+
+    existing_text = target_value.get('value', '') or ''
+    combined = (existing_text + '\n' + '\n'.join(orphan_lines)).strip() if existing_text else '\n'.join(orphan_lines).strip()
+    target_value['value'] = combined
+    if 'item_key' not in target_value:
+        target_value['item_key'] = []
+    if 'experimental_conditions' not in target_value:
+        target_value['experimental_conditions'] = {}
+
+    kept[target_field] = target_value
+    spec_data['test_values'] = kept
+    return True
+
+
+def _normalize_experimental_conditions(exp_cond, category_code):
+    """规范化试验条件
+
+    规则：
+    - 若 category_code 属于需要温度的类别，且 exp_cond 中没有 temperature
+      （None 或缺失），则自动填充为 "室温"。
+    - 其他情况原样返回。
+    """
+    if not isinstance(exp_cond, dict):
+        return exp_cond
+    if category_code not in _TEMPERATURE_REQUIRED_CATEGORIES:
+        return exp_cond
+
+    if not exp_cond.get('temperature'):
+        exp_cond = dict(exp_cond)
+        exp_cond['temperature'] = '室温'
+    return exp_cond
 
 class MaterialDatabase:
     def __init__(self, db_path=None, db_url=None):
@@ -266,7 +412,8 @@ class MaterialDatabase:
                 if duplicate_id:
                     raise ValueError(f"数据已存在，记录ID: {duplicate_id}")
             
-            category_code = spec_data.get('test_category_code')
+            category_code = _normalize_category_code(spec_data.get('test_category_code'))
+            spec_data['test_category_code'] = category_code
             category = session.query(TestCategory).filter_by(code=category_code).first()
             if not category:
                 raise ValueError(f"测试类别不存在: {category_code}")
@@ -289,6 +436,9 @@ class MaterialDatabase:
             )
             
             field_map = {f.field_code: f for f in category.field_definitions}
+
+            # 聚合未匹配字段到目标 text 字段（如非金属夹杂多个细分字段 → requirement_description）
+            _aggregate_orphan_fields(spec_data, field_map)
             
             # 支持两种格式：新格式（数组）和旧格式（字典）
             test_values_input = spec_data.get('test_values', {})
@@ -296,28 +446,35 @@ class MaterialDatabase:
             if isinstance(test_values_input, list):
                 # 新格式：[{test_category_code, experimental_conditions, values: [{field_code, ...}]}]
                 for test_category_data in test_values_input:
+                    # 规范化试验条件：未填写温度时默认为"室温"（仅针对温度相关类别）
                     experimental_conditions = test_category_data.get('experimental_conditions', {})
+                    experimental_conditions = _normalize_experimental_conditions(experimental_conditions, category_code)
+                    test_category_data['experimental_conditions'] = experimental_conditions
+
                     values = test_category_data.get('values', [])
-                    
+
                     for value_item in values:
                         field_code = value_item.get('field_code')
                         if field_code not in field_map:
                             continue
-                        
+
                         # 跳过空值
                         if not any(value_item.get(k) for k in ['min_value', 'max_value', 'value', 'number_value', 'string_value', 'comparison']):
                             continue
-                        
+
                         field_def = field_map[field_code]
                         raw_unit = value_item.get('unit', field_def.unit)
                         normalized_unit = _normalize_unit(raw_unit, category_code)
-                        
+
+                        # 规范化比较符号：>= → ≥，<= → ≤
+                        normalized_comparison = _normalize_comparison(value_item.get('comparison'))
+
                         test_value = TestValue(
                             field_definition_id=field_def.id,
                             unit=normalized_unit,
                             experimental_conditions=json.dumps(experimental_conditions) if experimental_conditions else None
                         )
-                        
+
                         # 保存 item_key（项目关键字）
                         item_key = value_item.get('item_key')
                         if item_key:
@@ -348,24 +505,24 @@ class MaterialDatabase:
                         else:
                             # 自动生成 item_key
                             test_value.item_key = generate_item_key(field_def.field_name, None)
-                        
+
                         if field_def.field_type == 'range':
                             if value_item.get('min_value') is not None:
                                 test_value.min_value = str(value_item.get('min_value'))
                             elif value_item.get('value') is not None:
                                 test_value.min_value = str(value_item.get('value'))
-                            
+
                             if value_item.get('max_value') is not None:
                                 test_value.max_value = str(value_item.get('max_value'))
                             elif value_item.get('value') is not None:
                                 test_value.max_value = str(value_item.get('value'))
-                            
-                            test_value.comparison = value_item.get('comparison')
+
+                            test_value.comparison = normalized_comparison
                         elif field_def.field_type == 'number':
                             test_value.number_value = str(value_item.get('value')) if value_item.get('value') is not None else None
                         elif field_def.field_type in ('string', 'text'):
                             test_value.string_value = value_item.get('value')
-                        
+
                         spec.test_values.append(test_value)
             else:
                 # 旧格式：{field_code: {...}}
@@ -374,39 +531,49 @@ class MaterialDatabase:
                 if '_experimental_conditions_placeholder' in test_values_input:
                     placeholder = test_values_input['_experimental_conditions_placeholder']
                     if isinstance(placeholder, dict) and placeholder.get('experimental_conditions'):
-                        shared_experimental_conditions = placeholder['experimental_conditions']
-                
+                        # 规范化占位符中的试验条件
+                        normalized_placeholder_exp = _normalize_experimental_conditions(
+                            placeholder['experimental_conditions'], category_code
+                        )
+                        placeholder['experimental_conditions'] = normalized_placeholder_exp
+                        shared_experimental_conditions = normalized_placeholder_exp
+
                 for field_code, value_data in test_values_input.items():
                     if field_code == '_experimental_conditions_placeholder':
                         continue  # 跳过占位字段
-                    
+
                     if field_code not in field_map:
                         continue
-                    
+
                     # 跳过空值（但允许只有 comparison 的情况，如"余量"）
-                    if not value_data or (isinstance(value_data, dict) and 
+                    if not value_data or (isinstance(value_data, dict) and
                         not any(value_data.get(k) for k in ['min_value', 'max_value', 'value', 'number_value', 'string_value', 'comparison'])):
                         continue
-                    
+
                     field_def = field_map[field_code]
                     raw_unit = value_data.get('unit', field_def.unit)
                     normalized_unit = _normalize_unit(raw_unit, category_code)
-                    
+
+                    # 规范化比较符号：>= → ≥，<= → ≤
+                    normalized_comparison = _normalize_comparison(value_data.get('comparison'))
+
                     # 获取 experimental_conditions（优先使用字段自己的，否则使用共享的）
                     experimental_conditions = value_data.get('experimental_conditions', {})
                     if not experimental_conditions and shared_experimental_conditions:
                         experimental_conditions = shared_experimental_conditions
+                    # 规范化试验条件：未填写温度时默认为"室温"（仅针对温度相关类别）
+                    experimental_conditions = _normalize_experimental_conditions(experimental_conditions, category_code)
                     if isinstance(experimental_conditions, dict) and any(experimental_conditions.values()):
                         experimental_conditions_json = json.dumps(experimental_conditions)
                     else:
                         experimental_conditions_json = None
-                    
+
                     test_value = TestValue(
                         field_definition_id=field_def.id,
                         unit=normalized_unit,
                         experimental_conditions=experimental_conditions_json
                     )
-                    
+
                     # 保存 item_key（项目关键字）
                     item_key = value_data.get('item_key')
                     if item_key:
@@ -437,24 +604,24 @@ class MaterialDatabase:
                     else:
                         # 自动生成 item_key
                         test_value.item_key = generate_item_key(field_def.field_name, None)
-                    
+
                     if field_def.field_type == 'range':
                         if value_data.get('min_value') is not None:
                             test_value.min_value = str(value_data.get('min_value'))
                         elif value_data.get('value') is not None:
                             test_value.min_value = str(value_data.get('value'))
-                        
+
                         if value_data.get('max_value') is not None:
                             test_value.max_value = str(value_data.get('max_value'))
                         elif value_data.get('value') is not None:
                             test_value.max_value = str(value_data.get('value'))
-                        
-                        test_value.comparison = value_data.get('comparison')
+
+                        test_value.comparison = normalized_comparison
                     elif field_def.field_type == 'number':
                         test_value.number_value = str(value_data.get('value')) if value_data.get('value') is not None else None
                     elif field_def.field_type in ('string', 'text'):
                         test_value.string_value = value_data.get('value')
-                    
+
                     spec.test_values.append(test_value)
             
             session.add(spec)
@@ -491,41 +658,51 @@ class MaterialDatabase:
             if 'test_values' in spec_data:
                 category = spec.test_category
                 field_map = {f.field_code: f for f in category.field_definitions}
-                
+
                 session.query(TestValue).filter_by(spec_id=spec_id).delete()
-                
+
                 # 首先检查是否有占位字段中的试验条件
                 shared_experimental_conditions = None
                 if '_experimental_conditions_placeholder' in spec_data['test_values']:
                     placeholder = spec_data['test_values']['_experimental_conditions_placeholder']
                     if isinstance(placeholder, dict) and placeholder.get('experimental_conditions'):
-                        shared_experimental_conditions = placeholder['experimental_conditions']
-                
+                        # 规范化占位符中的试验条件
+                        normalized_placeholder_exp = _normalize_experimental_conditions(
+                            placeholder['experimental_conditions'], category.code
+                        )
+                        placeholder['experimental_conditions'] = normalized_placeholder_exp
+                        shared_experimental_conditions = normalized_placeholder_exp
+
                 for field_code, value_data in spec_data['test_values'].items():
                     if field_code == '_experimental_conditions_placeholder':
                         continue  # 跳过占位字段
-                    
+
                     if field_code not in field_map:
                         continue
-                    
+
                     # 跳过空值（但允许只有 comparison 的情况，如"余量"）
-                    if not value_data or (isinstance(value_data, dict) and 
+                    if not value_data or (isinstance(value_data, dict) and
                         not any(value_data.get(k) for k in ['min_value', 'max_value', 'value', 'number_value', 'string_value', 'comparison'])):
                         continue
-                    
+
                     field_def = field_map[field_code]
                     raw_unit = value_data.get('unit', field_def.unit)
                     normalized_unit = _normalize_unit(raw_unit, category.code)
-                    
+
+                    # 规范化比较符号：>= → ≥，<= → ≤
+                    normalized_comparison = _normalize_comparison(value_data.get('comparison'))
+
                     # 获取 experimental_conditions（优先使用字段自己的，否则使用共享的）
                     experimental_conditions = value_data.get('experimental_conditions', {})
                     if not experimental_conditions and shared_experimental_conditions:
                         experimental_conditions = shared_experimental_conditions
+                    # 规范化试验条件：未填写温度时默认为"室温"（仅针对温度相关类别）
+                    experimental_conditions = _normalize_experimental_conditions(experimental_conditions, category.code)
                     if isinstance(experimental_conditions, dict) and any(experimental_conditions.values()):
                         experimental_conditions_json = json.dumps(experimental_conditions)
                     else:
                         experimental_conditions_json = None
-                    
+
                     test_value = TestValue(
                         spec_id=spec_id,
                         field_definition_id=field_def.id,
@@ -569,18 +746,18 @@ class MaterialDatabase:
                             test_value.min_value = str(value_data.get('min_value'))
                         elif value_data.get('value') is not None:
                             test_value.min_value = str(value_data.get('value'))
-                        
+
                         if value_data.get('max_value') is not None:
                             test_value.max_value = str(value_data.get('max_value'))
                         elif value_data.get('value') is not None:
                             test_value.max_value = str(value_data.get('value'))
-                        
-                        test_value.comparison = value_data.get('comparison')
+
+                        test_value.comparison = normalized_comparison
                     elif field_def.field_type == 'number':
                         test_value.number_value = str(value_data.get('value')) if value_data.get('value') is not None else None
                     elif field_def.field_type in ('string', 'text'):
                         test_value.string_value = value_data.get('value')
-                    
+
                     session.add(test_value)
             
             session.commit()

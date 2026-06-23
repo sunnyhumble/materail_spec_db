@@ -248,25 +248,25 @@
 
 | 字段代码 | 字段名称 | 字段类型 |
 |----------|----------|----------|
-| requirement_description | 要求描述 | text |
+| fracture_inspection_description | 要求描述 | text |
 
 ### 2.10 晶粒度 (grain_size)
 
 | 字段代码 | 字段名称 | 字段类型 |
 |----------|----------|----------|
-| requirement_description | 要求描述 | text |
+| grain_size_description | 要求描述 | text |
 
 ### 2.11 非金属夹杂 (non_metallic_inclusion)
 
 | 字段代码 | 字段名称 | 字段类型 |
 |----------|----------|----------|
-| requirement_description | 要求描述 | text |
+| non_metallic_inclusion_description | 要求描述 | text |
 
 ### 2.12 显微组织 (microstructure)
 
 | 字段代码 | 字段名称 | 字段类型 |
 |----------|----------|----------|
-| requirement_description | 要求描述 | text |
+| microstructure_description | 要求描述 | text |
 
 ### 2.13 高周疲劳 (high_cycle_fatigue)
 

@@ -31,6 +31,53 @@ def get_ocr_parser():
     return _vision_parser_instance
 
 
+def _normalize_recognize_result(specs):
+    """对识别结果做最终规范化：category_code 别名 + comparison 符号 + 试验条件默认室温
+
+    之所以在 API 层再做一次，是因为 _split_specs_by_category 会在
+    parser 返回前/后重新生成 test_values，覆盖 parser 内部的规范化结果。
+    """
+    from database.operations import (
+        _normalize_category_code as _norm_cat,
+        _normalize_comparison as _norm_cmp,
+        _normalize_experimental_conditions as _norm_exp,
+    )
+    if not isinstance(specs, list):
+        return specs
+    for spec in specs:
+        if not isinstance(spec, dict):
+            continue
+        # 1) 类别代码规范化（LLM 输出的拼写错误 → 数据库定义的标准代码）
+        spec['test_category_code'] = _norm_cat(spec.get('test_category_code', ''))
+        cat = spec['test_category_code']
+
+        # 2) test_values 字段规范化
+        tv = spec.get('test_values', {})
+        if isinstance(tv, dict):
+            for _field_code, field_data in tv.items():
+                if not isinstance(field_data, dict):
+                    continue
+                if 'comparison' in field_data:
+                    field_data['comparison'] = _norm_cmp(field_data.get('comparison'))
+                if 'experimental_conditions' in field_data:
+                    field_data['experimental_conditions'] = _norm_exp(
+                        field_data.get('experimental_conditions', {}), cat
+                    )
+        elif isinstance(tv, list):
+            for group in tv:
+                if not isinstance(group, dict):
+                    continue
+                group['experimental_conditions'] = _norm_exp(
+                    group.get('experimental_conditions', {}), cat
+                )
+                for value_item in group.get('values', []) or []:
+                    if not isinstance(value_item, dict):
+                        continue
+                    if 'comparison' in value_item:
+                        value_item['comparison'] = _norm_cmp(value_item.get('comparison'))
+    return specs
+
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -187,15 +234,18 @@ def parse_image():
             with open(filepath, 'rb') as f:
                 base64_data = base64.b64encode(f.read()).decode('utf-8')
             specs = parser.parse_image_from_base64(base64_data, test_category_code)
-            
+
             from parser.hybrid_parser import HybridMaterialParser
             parser_helper = HybridMaterialParser.__new__(HybridMaterialParser)
             original_count = len(specs)
             specs = parser_helper._split_specs_by_category(specs)
             print(f"[API拆分] {original_count} 条 → {len(specs)} 条")
-            
+
+            # API 层规范化（_split_specs_by_category 会重新生成 test_values，需再次规范化）
+            specs = _normalize_recognize_result(specs)
+
             os.remove(filepath)
-            
+
             return jsonify({'success': True, 'data': specs})
         
         return jsonify({'success': False, 'error': '不支持的文件类型'}), 400
@@ -215,17 +265,20 @@ def parse_image_base64():
         
         parser = get_ocr_parser()
         specs = parser.parse_image_from_base64(image_data, test_category_code)
-        
+
         # 在 API 层面添加强制拆分逻辑（确保执行）
         from parser.hybrid_parser import HybridMaterialParser
         parser_helper = HybridMaterialParser.__new__(HybridMaterialParser)
         original_count = len(specs)
         specs = parser_helper._split_specs_by_category(specs)
         print(f"[API拆分] {original_count} 条 → {len(specs)} 条")
-        
+
+        # API 层规范化（_split_specs_by_category 会重新生成 test_values，需再次规范化）
+        specs = _normalize_recognize_result(specs)
+
         elapsed = time.time() - start_time
         print(f"[性能] 图片识别总耗时：{elapsed:.2f}秒，识别到 {len(specs)} 条数据")
-        
+
         return jsonify({'success': True, 'data': specs, 'elapsed': round(elapsed, 2)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

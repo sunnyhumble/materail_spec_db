@@ -106,7 +106,55 @@ class HybridMaterialParser:
                 print(f"[拆分错误] {split_err}")
                 logger.error(f"[拆分] 拆分失败：{split_err}", exc_info=True)
                 # 拆分失败时，不改变原始数据
-            
+
+            # **兜底拆分**：对 grain_size_description / macro_structure_description 等 text 字段
+            # 检测 value 字段中是否包含多个"直径"规格，若是则拆成多条
+            try:
+                specs = self._split_text_field_specs(specs)
+                print(f"[text字段拆分后] 数据条数：{len(specs)}")
+                logger.info(f"[text字段拆分] 处理后得到 {len(specs)} 条数据")
+            except Exception as text_err:
+                print(f"[text字段拆分错误] {text_err}")
+                logger.error(f"[text字段拆分] 拆分失败：{text_err}", exc_info=True)
+
+            # **规范化输出**：comparison 符号标准化 + 试验条件默认室温
+            try:
+                from database.operations import (
+                    _normalize_category_code as _norm_cat,
+                    _normalize_comparison as _norm_cmp,
+                    _normalize_experimental_conditions as _norm_exp,
+                )
+                for spec in specs:
+                    # 类别代码别名映射（LLM 常见拼写错误 → 数据库标准代码）
+                    spec['test_category_code'] = _norm_cat(spec.get('test_category_code', ''))
+                    cat = spec['test_category_code']
+                    tv = spec.get('test_values', {})
+                    if isinstance(tv, dict):
+                        for field_code, field_data in tv.items():
+                            if not isinstance(field_data, dict):
+                                continue
+                            if 'comparison' in field_data:
+                                field_data['comparison'] = _norm_cmp(field_data.get('comparison'))
+                            if 'experimental_conditions' in field_data:
+                                field_data['experimental_conditions'] = _norm_exp(
+                                    field_data.get('experimental_conditions', {}), cat
+                                )
+                    elif isinstance(tv, list):
+                        for group in tv:
+                            if not isinstance(group, dict):
+                                continue
+                            group['experimental_conditions'] = _norm_exp(
+                                group.get('experimental_conditions', {}), cat
+                            )
+                            for value_item in group.get('values', []) or []:
+                                if not isinstance(value_item, dict):
+                                    continue
+                                if 'comparison' in value_item:
+                                    value_item['comparison'] = _norm_cmp(value_item.get('comparison'))
+            except Exception as norm_err:
+                print(f"[规范化错误] {norm_err}")
+                logger.error(f"[规范化] 规范化失败：{norm_err}", exc_info=True)
+
             total_elapsed = time.time() - ocr_start
             if specs:
                 logger.info(f"[性能] 处理完成，总耗时：{total_elapsed:.2f}秒")
@@ -170,6 +218,16 @@ class HybridMaterialParser:
             # 断裂韧度
             'KIC': 'K_IC', 'K_IC': 'K_IC', 'K1C': 'K_IC', '断裂韧度': 'K_IC',
             'K IC': 'K_IC', 'K I C': 'K_IC',
+            # 硬度标尺 (HRC/HB/HV/HBW/HRA/HRB 等)
+            'HRC': 'hardness_value', 'HRC0': 'hardness_value', 'HRC值': 'hardness_value',
+            'HB': 'hardness_value', 'HBW': 'hardness_value', 'HBW5/750': 'hardness_value',
+            'HV': 'hardness_value', 'HV1': 'hardness_value', 'HV5': 'hardness_value',
+            'HV10': 'hardness_value', 'HV30': 'hardness_value', 'HV50': 'hardness_value',
+            'HRA': 'hardness_value', 'HRB': 'hardness_value', 'HRD': 'hardness_value',
+            'HRE': 'hardness_value', 'HRF': 'hardness_value', 'HRG': 'hardness_value',
+            'HR15N': 'hardness_value', 'HR30N': 'hardness_value', 'HR45N': 'hardness_value',
+            'HRC硬度': 'hardness_value', '硬度': 'hardness_value',
+            '硬度值': 'hardness_value', 'HARDNESS': 'hardness_value',
         }
         
         import re
@@ -285,6 +343,8 @@ class HybridMaterialParser:
                 inferred_category = 'fracture_toughness'
             elif 'A_Ku2' in special_fields or 'impact_energy' in special_fields:
                 inferred_category = 'impact'
+            elif 'hardness_value' in special_fields or 'hardness_type' in special_fields:
+                inferred_category = 'hardness'
             elif 'σ_b' in special_fields or 'σ_0.2' in special_fields:
                 inferred_category = 'tension'
             elif has_chemical:
@@ -388,6 +448,11 @@ class HybridMaterialParser:
    - elongation_5d 或断后伸长率(5d)：断后伸长率（长比例试样，单位 %），属于拉伸类别 (tension)
    - elongation_4d 或断后伸长率(4d)：断后伸长率（短比例试样，单位 %），属于拉伸类别 (tension)
    - psi 或断面收缩率：断面收缩率（单位 %），属于拉伸类别 (tension)
+   - HRC/HB/HBW/HV/HRA/HRB/HRC等硬度标尺：属于硬度类别 (hardness)
+     * 标尺本身填到 test_values.hardness_type（如 "HRC"、"HBW"、"HV"）
+     * 数值填到 test_values.hardness_value（带 comparison 和 unit）
+     * 例：表格 HRC 列写 "53"，输出 test_values.hardness_type="HRC", test_values.hardness_value={"min_value":"53","comparison":"≥"}
+     * 例：表格 HRC 列写 "≥53"，输出 hardness_value={"min_value":"53","comparison":"≥","unit":"HRC"}
 6. **宏观组织（低倍）检验特殊处理**：
    - **识别章节结构**：如果文本中有"3.7 低倍"、"3.7.1"、"3.7.2"、"3.7.3"等章节编号，这些都是低倍检验的内容
    - **文字内容合并**：3.7.1、3.7.2 等小节的所有文字描述都属于低倍判定指标
@@ -684,9 +749,130 @@ OCR 识别的原始文本：
                 new_spec['specification'] = spec.get('specification', '-') or '-'
                 new_spec['remarks'] = preprocessing_text.strip('，。、, ') if preprocessing_text else spec.get('remarks', '')
                 result_specs.append(new_spec)
-        
+
         return result_specs
-    
+
+    def _split_text_field_specs(self, specs: List[Dict]) -> List[Dict]:
+        """
+        **兜底拆分**：对 grain_size_description / macro_structure_description 等 text 字段
+        检测 value 字段中是否包含多个"直径"规格，若是则拆成多条记录。
+
+        场景：LLM 把多个规格合并到 1 条数据的 grain_size_description 字段中：
+          "直径不大于 300mm 的棒材晶粒度级别大于等于 7 级，直径大于 300mm 的棒材晶粒度级别大于等于 6 级"
+        期望：拆成 2 条数据，每条对应一个规格。
+        """
+        import re
+
+        if not specs:
+            return specs
+
+        # 适用的 text 字段及对应规格匹配模式
+        text_field_spec = {
+            'grain_size_description': {
+                'spec_patterns': [
+                    r'直径\s*(?:不大于|大于|≤|≥|<|>|等于)\s*\d+\s*mm[^,。；;;]*?(?=晶粒度|，|$)',
+                    r'直径\s*\d+\s*mm[^,。；;;]*?(?=晶粒度|，|$)',
+                ],
+                'req_patterns': [
+                    r'晶粒度级别[^,。；;;]*',
+                    r'晶粒度[^,。；;;]*?(?:\d+\s*级[^,。；;;]*)?',
+                ],
+            },
+        }
+
+        result_specs = []
+
+        for spec in specs:
+            test_values = spec.get('test_values', {})
+            if not isinstance(test_values, dict):
+                result_specs.append(spec)
+                continue
+
+            # 检查是否有需要拆分的 text 字段
+            target_field = None
+            field_conf = None
+            for tf, conf in text_field_spec.items():
+                if tf in test_values:
+                    target_field = tf
+                    field_conf = conf
+                    break
+
+            if not target_field:
+                result_specs.append(spec)
+                continue
+
+            field_data = test_values[target_field]
+            # 兼容字符串格式：LLM 直接把字符串放到 grain_size_description 字段
+            if isinstance(field_data, str):
+                value_text = field_data
+                field_data = {'value': field_data}
+            elif isinstance(field_data, dict):
+                value_text = field_data.get('value', '')
+            else:
+                result_specs.append(spec)
+                continue
+
+            if not value_text or not isinstance(value_text, str):
+                result_specs.append(spec)
+                continue
+
+            # 找所有"直径"开头的规格段
+            spec_parts = []
+            for pattern in field_conf['spec_patterns']:
+                matches = re.findall(pattern, value_text)
+                for m in matches:
+                    cleaned = m.strip('，。、, ')
+                    if cleaned and cleaned not in spec_parts:
+                        spec_parts.append(cleaned)
+
+            if len(spec_parts) < 2:
+                # 只有一个规格，无需拆分
+                result_specs.append(spec)
+                continue
+
+            print(f"[text字段拆分] {target_field}: 检测到 {len(spec_parts)} 个规格 → 拆分")
+
+            # 按规格位置分段提取每段的判定要求
+            positions = []
+            for sp in spec_parts:
+                pos = value_text.find(sp)
+                if pos >= 0:
+                    positions.append((pos, sp))
+            positions.sort()
+
+            for i, (pos, sp) in enumerate(positions):
+                spec_end = pos + len(sp)
+                if i + 1 < len(positions):
+                    next_pos = positions[i + 1][0]
+                    segment = value_text[spec_end:next_pos]
+                else:
+                    segment = value_text[spec_end:]
+
+                # 提取判定要求
+                req_text = segment.strip('，。、, ')
+                for rp in field_conf['req_patterns']:
+                    rm = re.search(rp, segment)
+                    if rm:
+                        req_text = rm.group().strip('，。、, ')
+                        break
+
+                # 生成新记录（保持原始 field_data 格式：对象或字符串）
+                new_spec = spec.copy()
+                new_spec['test_values'] = test_values.copy()
+                if isinstance(test_values.get(target_field), str):
+                    # LLM 输出是字符串格式：直接赋值字符串
+                    new_spec['test_values'][target_field] = req_text
+                else:
+                    # 对象格式：复制原对象并更新 value 字段
+                    new_field_data = field_data.copy()
+                    new_field_data['value'] = req_text
+                    new_spec['test_values'][target_field] = new_field_data
+                new_spec['specification'] = sp
+                result_specs.append(new_spec)
+                print(f"[text字段拆分]   规格={sp} → 判定={req_text}")
+
+        return result_specs
+
     def _split_specs_by_category(self, specs: List[Dict]) -> List[Dict]:
         """
         **关键优化**：按测试类别强制拆分数据
@@ -819,40 +1005,88 @@ OCR 识别的原始文本：
         }
         
         result_specs = []
-        
+
+        # 硬度标尺字段名映射：把 HRC/HB/HV/HRB 等统一映射为 hardness_value
+        hardness_scale_map = {
+            'HRC': 'hardness_value', 'hrc': 'hardness_value', 'Hrc': 'hardness_value',
+            'HB': 'hardness_value', 'hb': 'hardness_value', 'HBW': 'hardness_value', 'hbw': 'hardness_value',
+            'HV': 'hardness_value', 'hv': 'hardness_value', 'HV1': 'hardness_value', 'HV5': 'hardness_value',
+            'HV10': 'hardness_value', 'HV30': 'hardness_value', 'HV50': 'hardness_value',
+            'HRA': 'hardness_value', 'hra': 'hardness_value',
+            'HRB': 'hardness_value', 'hrb': 'hardness_value',
+            'HRD': 'hardness_value', 'hrd': 'hardness_value',
+            'HRE': 'hardness_value', 'hre': 'hardness_value',
+            'HRF': 'hardness_value', 'hrf': 'hardness_value',
+            'HRG': 'hardness_value', 'hrg': 'hardness_value',
+            'HR15N': 'hardness_value', 'HR30N': 'hardness_value', 'HR45N': 'hardness_value',
+            '硬度': 'hardness_value', '硬度值': 'hardness_value', 'HRC硬度': 'hardness_value',
+        }
+
         for spec in specs:
             test_values = spec.get('test_values', {})
             if not test_values:
                 result_specs.append(spec)
                 continue
-            
+
             # 按类别分组字段
             category_groups = {}
             for field_name, field_value in test_values.items():
                 # 标准化字段名（转小写后查找）
                 field_name_lower = field_name.lower()
                 field_name_upper = field_name.upper()
-                
+
                 # 查找字段对应的类别（尝试多种匹配方式）
                 category = field_category_map.get(field_name) or \
                            field_category_map.get(field_name_lower) or \
                            field_category_map.get(field_name_upper) or \
                            spec.get('test_category_code', 'tension')
-                
+
+                # **硬度标尺字段名规范化**：把 HRC/HB/HV/HRB 等改为 hardness_value，并把标尺名存到 unit 字段
+                normalized_field_name = field_name
+                if category == 'hardness' and field_name in hardness_scale_map:
+                    normalized_field_name = 'hardness_value'
+                    if isinstance(field_value, dict):
+                        # 把标尺名（如 HRC）存到 unit 字段（若 unit 字段已存在则保留原值）
+                        if 'unit' not in field_value or not field_value.get('unit'):
+                            field_value = {**field_value, 'unit': field_name}
+                        # 同步把标尺记录到 hardness_type（若 hardness_type 字段不存在）
+                    logger.info(f"[硬度规范化] 字段 '{field_name}' -> hardness_value, 标尺={field_name}")
+
                 # 持久试验特殊处理：如果数据包含持久试验特征字段（sigma, t），则将相关字段都归为 stress_rupture 类别
                 has_creep_fields = any(
-                    f in ['sigma', 'stress', 't', 'time', 'duration'] 
+                    f in ['sigma', 'stress', 't', 'time', 'duration']
                     for f in test_values.keys()
                 )
                 if has_creep_fields:
                     if field_name in ['test_temperature', 'delta_4', 'delta', 'elongation', 'psi', 'reduction_of_area']:
                         category = 'stress_rupture'
                         logger.info(f"[持久试验] 字段 '{field_name}' 归为 stress_rupture 类别")
-                
+
                 if category not in category_groups:
                     category_groups[category] = {}
-                category_groups[category][field_name] = field_value
+                category_groups[category][normalized_field_name] = field_value
                 logger.info(f"[拆分匹配] 字段 '{field_name}' -> 类别 '{category}'")
+
+            # **硬度类别后处理**：把硬度标尺名提取到 hardness_type 字段
+            if 'hardness' in category_groups:
+                hardness_fields = category_groups['hardness']
+                # 找出 unit 字段中的标尺名
+                hardness_type_value = None
+                for fk, fv in list(hardness_fields.items()):
+                    if isinstance(fv, dict) and fv.get('unit') and fk == 'hardness_value':
+                        # 标尺名（如 HRC）可能就在 unit 字段里
+                        unit_val = fv.get('unit', '')
+                        if unit_val in ['HRC', 'HB', 'HBW', 'HV', 'HRA', 'HRB', 'HRD', 'HRE', 'HRF', 'HRG',
+                                        'HR15N', 'HR30N', 'HR45N', 'HV1', 'HV5', 'HV10', 'HV30', 'HV50',
+                                        'HRC硬度', '硬度', '硬度值']:
+                            hardness_type_value = unit_val
+                            # 把 unit 字段清空（标尺不算单位）或保留为标尺
+                            # 这里保留标尺在 unit 中，同时写入 hardness_type
+                            break
+                # 如果找到了 hardness_type 但没在 hardness_type 字段里，则补充
+                if hardness_type_value and 'hardness_type' not in hardness_fields:
+                    hardness_fields['hardness_type'] = hardness_type_value
+                    logger.info(f"[硬度规范化] 补充 hardness_type={hardness_type_value}")
             
             # 为每个类别创建一条数据
             original_category = spec.get('test_category_code', 'tension')

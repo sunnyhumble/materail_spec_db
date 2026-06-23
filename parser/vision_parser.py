@@ -82,7 +82,58 @@ class VisionMaterialParser:
                     spec['sampling_direction'] = '-'
             
             specs = self._infer_comparison(specs)
-            
+
+            # **晶粒度特殊处理**：拆分预处理、规格、判定要求，生成多条记录
+            try:
+                specs = self._process_grain_size_specs(specs)
+                logger.info(f"[晶粒度] 处理后得到 {len(specs)} 条数据")
+            except Exception as grain_err:
+                logger.error(f"[晶粒度] 处理失败：{grain_err}", exc_info=True)
+
+            # **兜底拆分**：对 grain_size_description 等 text 字段按"直径"拆成多条
+            try:
+                specs = self._split_text_field_specs(specs)
+                logger.info(f"[text字段拆分] 处理后得到 {len(specs)} 条数据")
+            except Exception as text_err:
+                logger.error(f"[text字段拆分] 拆分失败：{text_err}", exc_info=True)
+
+            # **规范化输出**：comparison 符号标准化 + 试验条件默认室温
+            try:
+                from database.operations import (
+                    _normalize_category_code as _norm_cat,
+                    _normalize_comparison as _norm_cmp,
+                    _normalize_experimental_conditions as _norm_exp,
+                )
+                for spec in specs:
+                    # 类别代码别名映射（LLM 常见拼写错误 → 数据库标准代码）
+                    spec['test_category_code'] = _norm_cat(spec.get('test_category_code', ''))
+                    cat = spec['test_category_code']
+                    tv = spec.get('test_values', {})
+                    if isinstance(tv, dict):
+                        for field_code, field_data in tv.items():
+                            if not isinstance(field_data, dict):
+                                continue
+                            if 'comparison' in field_data:
+                                field_data['comparison'] = _norm_cmp(field_data.get('comparison'))
+                            if 'experimental_conditions' in field_data:
+                                field_data['experimental_conditions'] = _norm_exp(
+                                    field_data.get('experimental_conditions', {}), cat
+                                )
+                    elif isinstance(tv, list):
+                        for group in tv:
+                            if not isinstance(group, dict):
+                                continue
+                            group['experimental_conditions'] = _norm_exp(
+                                group.get('experimental_conditions', {}), cat
+                            )
+                            for value_item in group.get('values', []) or []:
+                                if not isinstance(value_item, dict):
+                                    continue
+                                if 'comparison' in value_item:
+                                    value_item['comparison'] = _norm_cmp(value_item.get('comparison'))
+            except Exception as norm_err:
+                logger.error(f"[规范化] 规范化失败：{norm_err}", exc_info=True)
+
             return specs
             
         except Exception as e:
@@ -478,24 +529,40 @@ class VisionMaterialParser:
     def _process_grain_size_specs(self, specs: List[Dict]) -> List[Dict]:
         """
         晶粒度特殊处理：拆分预处理、规格、判定要求，生成多条记录
+
+        支持 grain_size_description 字段为字符串或 {value: "..."} 对象格式。
         """
         import re
-        
+
         if not specs:
             return specs
-        
+
         result_specs = []
-        
+
         for spec in specs:
             if spec.get('test_category_code') != 'grain_size':
                 result_specs.append(spec)
                 continue
-            
-            grain_size_desc = spec.get('test_values', {}).get('grain_size_description', '')
+
+            grain_size_field = spec.get('test_values', {}).get('grain_size_description', '')
+            # 兼容字符串和对象两种格式
+            if isinstance(grain_size_field, dict):
+                grain_size_desc = grain_size_field.get('value', '') or grain_size_field.get('string_value', '')
+                grain_size_is_dict = True
+            elif isinstance(grain_size_field, str):
+                grain_size_desc = grain_size_field
+                grain_size_is_dict = False
+            else:
+                result_specs.append(spec)
+                continue
+
             if not grain_size_desc:
                 result_specs.append(spec)
                 continue
-            
+
+            print(f"[晶粒度] 原始描述：{grain_size_desc}")
+
+            # 1. 提取预处理方式（加热/保温/冷却等）
             preprocessing_patterns = [
                 r'晶粒度试样[^。，,]*?(?:加热|保温|冷却)[^。，,]*',
                 r'试样[^。，,]*?(?:加热|保温|冷却)[^。，,]*',
@@ -503,81 +570,205 @@ class VisionMaterialParser:
                 r'保温\s*\d+\s*min[^。，,]*',
                 r'(?:油冷|水冷|空冷)[^。，,]*',
             ]
-            
+
             preprocessing_parts = []
             remaining_desc = grain_size_desc
-            
+
             for pattern in preprocessing_patterns:
                 matches = re.findall(pattern, remaining_desc)
                 for match in matches:
                     if match not in preprocessing_parts:
                         preprocessing_parts.append(match)
                         remaining_desc = remaining_desc.replace(match, '', 1)
-            
+
             preprocessing_text = '，'.join(preprocessing_parts)
-            
+
+            # 2. 找所有"直径...mm"开头的规格段（更宽松的匹配，不强制"锻件"结尾）
             spec_patterns = [
-                r'直径\s*(?:不大于|大于|≤|>)\s*\d+\s*mm\s*(?:的|之)?.*?锻件',
-                r'规格[：:][^。，,]+',
+                r'直径\s*(?:不大于|大于|≤|≥|<|>|等于)\s*\d+\s*mm[^,。；;]*?(?=晶粒度|，|$)',
+                r'直径\s*\d+\s*mm[^,。；;]*?(?=晶粒度|，|$)',
+                r'规格[：:][^,。；;]+',
             ]
-            
+
             spec_parts = []
             for pattern in spec_patterns:
                 matches = re.findall(pattern, remaining_desc)
                 for match in matches:
-                    if match not in spec_parts:
-                        spec_parts.append(match)
-                        remaining_desc = remaining_desc.replace(match, '', 1)
-            
-            spec_text = '，'.join(spec_parts) if spec_parts else ''
-            requirement_text = remaining_desc.strip('，。、, ')
-            
-            if spec_parts:
-                combined_desc = grain_size_desc
+                    cleaned = match.strip('，。、, ')
+                    if cleaned and cleaned not in spec_parts:
+                        spec_parts.append(cleaned)
+
+            print(f"[晶粒度] 规格段：{spec_parts}")
+            print(f"[晶粒度] 预处理：{preprocessing_text}")
+
+            # 3. 按规格位置分段提取每段的判定要求
+            if len(spec_parts) >= 1:
                 spec_req_list = []
-                
-                last_pos = 0
-                sorted_specs = sorted(spec_parts, key=lambda x: combined_desc.find(x) if x in combined_desc else 999)
-                
-                for i, spec_part in enumerate(sorted_specs):
-                    spec_start = combined_desc.find(spec_part, last_pos)
-                    if spec_start == -1:
-                        continue
-                    
-                    search_start = spec_start + len(spec_part)
-                    if i + 1 < len(sorted_specs):
-                        next_spec_start = combined_desc.find(sorted_specs[i + 1], search_start)
-                        if next_spec_start == -1:
-                            next_spec_start = len(combined_desc)
-                        segment = combined_desc[search_start:next_spec_start]
+
+                # 找每个规格在原文（先剔除预处理内容）中的位置
+                search_text = remaining_desc
+                positions = []
+                for spec_part in spec_parts:
+                    pos = search_text.find(spec_part)
+                    if pos >= 0:
+                        positions.append((pos, spec_part))
+                positions.sort()
+
+                for i, (pos, spec_part) in enumerate(positions):
+                    spec_end = pos + len(spec_part)
+                    if i + 1 < len(positions):
+                        next_pos = positions[i + 1][0]
+                        segment = search_text[spec_end:next_pos]
                     else:
-                        segment = combined_desc[search_start:]
-                    
-                    req_match = re.search(r'晶粒度级别.{0,20}', segment)
-                    if req_match:
-                        spec_req_list.append((spec_part, req_match.group().strip()))
-                    else:
-                        req_match = re.search(r'晶粒度.{0,20}', segment)
-                        if req_match:
-                            spec_req_list.append((spec_part, req_match.group().strip()))
-                        else:
-                            spec_req_list.append((spec_part, requirement_text))
-                    
-                    last_pos = spec_start + len(spec_part)
-                
+                        segment = search_text[spec_end:]
+
+                    # 在 segment 中找判定要求
+                    req_match = re.search(r'晶粒度级别[^,。；;]*', segment)
+                    if not req_match:
+                        req_match = re.search(r'晶粒度[^,。；;]*?(?:\d+\s*级[^,。；;]*)?', segment)
+                    req_text = req_match.group().strip('，。、, ') if req_match else segment.strip('，。、, ')
+                    spec_req_list.append((spec_part, req_text))
+
+                # 4. 生成多条记录（保持原始 grain_size_description 字段格式）
                 for spec_part, req_text in spec_req_list:
                     new_spec = spec.copy()
                     new_spec['test_values'] = spec.get('test_values', {}).copy()
-                    new_spec['test_values']['grain_size_description'] = req_text
-                    new_spec['specification'] = spec_part.strip('，。、, ')
+                    if grain_size_is_dict:
+                        new_grain_size = grain_size_field.copy() if isinstance(grain_size_field, dict) else {}
+                        new_grain_size['value'] = req_text
+                        new_spec['test_values']['grain_size_description'] = new_grain_size
+                    else:
+                        new_spec['test_values']['grain_size_description'] = req_text
+                    new_spec['specification'] = spec_part
                     new_spec['remarks'] = preprocessing_text.strip('，。、, ')
                     result_specs.append(new_spec)
+                    print(f"[晶粒度] 生成记录：规格={new_spec['specification']}, 要求={req_text}")
             else:
+                # 无规格分段，按单条处理
+                requirement_text = remaining_desc.strip('，。、, ') or grain_size_desc
                 new_spec = spec.copy()
                 new_spec['test_values'] = spec.get('test_values', {}).copy()
-                new_spec['test_values']['grain_size_description'] = requirement_text
+                if grain_size_is_dict:
+                    new_grain_size = grain_size_field.copy() if isinstance(grain_size_field, dict) else {}
+                    new_grain_size['value'] = requirement_text
+                    new_spec['test_values']['grain_size_description'] = new_grain_size
+                else:
+                    new_spec['test_values']['grain_size_description'] = requirement_text
                 new_spec['specification'] = spec.get('specification', '-') or '-'
                 new_spec['remarks'] = preprocessing_text.strip('，。、, ') if preprocessing_text else spec.get('remarks', '')
                 result_specs.append(new_spec)
-        
+
+        return result_specs
+
+    def _split_text_field_specs(self, specs: List[Dict]) -> List[Dict]:
+        """
+        兜底拆分：对 grain_size_description / macro_structure_description 等 text 字段
+        检测 value 字段中是否包含多个"直径"规格，若是则拆成多条记录。
+        """
+        import re
+
+        if not specs:
+            return specs
+
+        text_field_spec = {
+            'grain_size_description': {
+                'spec_patterns': [
+                    r'直径\s*(?:不大于|大于|≤|≥|<|>|等于)\s*\d+\s*mm[^,。；;]*?(?=晶粒度|，|$)',
+                    r'直径\s*\d+\s*mm[^,。；;]*?(?=晶粒度|，|$)',
+                ],
+                'req_patterns': [
+                    r'晶粒度级别[^,。；;]*',
+                    r'晶粒度[^,。；;]*?(?:\d+\s*级[^,。；;]*)?',
+                ],
+            },
+        }
+
+        result_specs = []
+
+        for spec in specs:
+            test_values = spec.get('test_values', {})
+            if not isinstance(test_values, dict):
+                result_specs.append(spec)
+                continue
+
+            target_field = None
+            field_conf = None
+            for tf, conf in text_field_spec.items():
+                if tf in test_values:
+                    target_field = tf
+                    field_conf = conf
+                    break
+
+            if not target_field:
+                result_specs.append(spec)
+                continue
+
+            field_data = test_values[target_field]
+            # 兼容字符串和对象格式
+            if isinstance(field_data, str):
+                value_text = field_data
+                field_data_dict = {'value': field_data}
+            elif isinstance(field_data, dict):
+                value_text = field_data.get('value', '') or field_data.get('string_value', '')
+                field_data_dict = field_data
+            else:
+                result_specs.append(spec)
+                continue
+
+            if not value_text or not isinstance(value_text, str):
+                result_specs.append(spec)
+                continue
+
+            # 找所有"直径"开头的规格段
+            spec_parts = []
+            for pattern in field_conf['spec_patterns']:
+                matches = re.findall(pattern, value_text)
+                for m in matches:
+                    cleaned = m.strip('，。、, ')
+                    if cleaned and cleaned not in spec_parts:
+                        spec_parts.append(cleaned)
+
+            if len(spec_parts) < 2:
+                result_specs.append(spec)
+                continue
+
+            print(f"[text字段拆分] {target_field}: 检测到 {len(spec_parts)} 个规格 → 拆分")
+
+            # 按规格位置分段提取每段的判定要求
+            positions = []
+            for sp in spec_parts:
+                pos = value_text.find(sp)
+                if pos >= 0:
+                    positions.append((pos, sp))
+            positions.sort()
+
+            for i, (pos, sp) in enumerate(positions):
+                spec_end = pos + len(sp)
+                if i + 1 < len(positions):
+                    next_pos = positions[i + 1][0]
+                    segment = value_text[spec_end:next_pos]
+                else:
+                    segment = value_text[spec_end:]
+
+                # 提取判定要求
+                req_text = segment.strip('，。、, ')
+                for rp in field_conf['req_patterns']:
+                    rm = re.search(rp, segment)
+                    if rm:
+                        req_text = rm.group().strip('，。、, ')
+                        break
+
+                # 生成新记录（保持原始格式）
+                new_spec = spec.copy()
+                new_spec['test_values'] = test_values.copy()
+                if isinstance(test_values.get(target_field), str):
+                    new_spec['test_values'][target_field] = req_text
+                else:
+                    new_field_data = field_data_dict.copy()
+                    new_field_data['value'] = req_text
+                    new_spec['test_values'][target_field] = new_field_data
+                new_spec['specification'] = sp
+                result_specs.append(new_spec)
+                print(f"[text字段拆分]   规格={sp} → 判定={req_text}")
+
         return result_specs
