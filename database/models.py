@@ -200,7 +200,7 @@ def init_default_categories(session):
             'description': '持久强度试验',
             'fields': [
                 {'field_name': '应力σ', 'field_code': 'stress', 'field_type': 'range', 'unit': 'MPa', 'is_required': True},
-                {'field_name': '持久时间', 'field_code': 'rupture_time', 'field_type': 'range', 'unit': 'h'},
+                {'field_name': '持续时间', 'field_code': 'rupture_time', 'field_type': 'range', 'unit': 'h'},
                 {'field_name': '蠕变断面收缩率 Zu', 'field_code': 'creep_reduction_of_area', 'field_type': 'range', 'unit': '%'},
                 {'field_name': '蠕变断后伸长率 δ4', 'field_code': 'creep_elongation_4d', 'field_type': 'range', 'unit': '%'},
                 {'field_name': '蠕变断后伸长率 δ5', 'field_code': 'creep_elongation_5d', 'field_type': 'range', 'unit': '%'},
@@ -212,6 +212,8 @@ def init_default_categories(session):
             'description': '蠕变性能试验',
             'fields': [
                 {'field_name': '应力', 'field_code': 'stress', 'field_type': 'number', 'unit': 'MPa', 'is_required': True},
+                {'field_name': '持续时间', 'field_code': 'rupture_time', 'field_type': 'range', 'unit': 'h'},
+                {'field_name': '残余变形', 'field_code': 'residual_deformation', 'field_type': 'range', 'unit': '%'},
                 {'field_name': '蠕变断面收缩率 Zu', 'field_code': 'creep_reduction_of_area', 'field_type': 'range', 'unit': '%'},
                 {'field_name': '蠕变断后伸长率 A4d', 'field_code': 'creep_elongation_4d', 'field_type': 'range', 'unit': '%'},
                 {'field_name': '蠕变断后伸长率 A5d', 'field_code': 'creep_elongation_5d', 'field_type': 'range', 'unit': '%'},

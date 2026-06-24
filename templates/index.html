@@ -1079,9 +1079,14 @@
                 if (value.comparison) {
                     let valueStr = '';
                     if (value.min_value !== undefined && value.min_value !== null) {
-                        valueStr = `${value.comparison}${value.min_value}`;
-                        if (value.max_value !== undefined && value.max_value !== null) {
-                            valueStr = `${value.min_value}~${value.max_value}`;
+                        // **优先保留 comparison**：当 comparison 已设置时不要用 min~max 覆盖
+                        // min 等于 max 时只显示 comparison+min（如 ≥40）
+                        if (value.max_value !== undefined && value.max_value !== null &&
+                            String(value.min_value) !== String(value.max_value)) {
+                            // min != max 才显示范围：comparison + min ~ max
+                            valueStr = `${value.comparison}${value.min_value}~${value.max_value}`;
+                        } else {
+                            valueStr = `${value.comparison}${value.min_value}`;
                         }
                     } else if (value.max_value !== undefined && value.max_value !== null) {
                         valueStr = `${value.comparison}${value.max_value}`;
@@ -1094,9 +1099,13 @@
                 }
                 
                 // comparison 为空的情况
-                if (value.min_value !== undefined && value.min_value !== null && 
+                if (value.min_value !== undefined && value.min_value !== null &&
                     value.max_value !== undefined && value.max_value !== null) {
-                    // 同时有 min 和 max，显示范围（用短横线）
+                    // **没有 comparison 时**：min 等于 max 就直接显示单值（如 50-50 → 50），
+                    // 不等才显示范围（如 100-200）
+                    if (String(value.min_value) === String(value.max_value)) {
+                        return { value: value.min_value, unit: unit };
+                    }
                     return { value: `${value.min_value}-${value.max_value}`, unit: unit };
                 } else if (value.min_value !== undefined && value.min_value !== null) {
                     return { value: value.min_value, unit: unit };
@@ -1107,7 +1116,7 @@
                 } else if (value.string_value !== undefined && value.string_value !== null && value.string_value !== '') {
                     return { value: value.string_value, unit: '' };
                 }
-                
+
                 return null;
             };
             
@@ -1195,16 +1204,41 @@
             
             // 收集所有 experimental_conditions
             const allExperimentalConditions = new Set();
+            // 先收集所有温度值，用于判断是否存在真实温度（避免同时显示 室温/常温/低温）
+            const allTemperatures = new Set();
             for (const [fieldCode, value] of Object.entries(spec.test_values)) {
                 if (value && value.experimental_conditions) {
                     for (const [key, val] of Object.entries(value.experimental_conditions)) {
                         if (val) {
+                            if (key === 'temperature') {
+                                allTemperatures.add(val);
+                            }
+                        }
+                    }
+                }
+            }
+            // 判断是否存在真实温度（非 室温/常温/低温 的带数值温度）
+            // 例如：650℃、704℃、-40℃、123K 等
+            const hasRealTemperature = Array.from(allTemperatures).some(t =>
+                t && (t.includes('℃') || t.includes('°C') || t.includes('K')) &&
+                !t.includes('室温') && !t.includes('常温') && !t.includes('低温')
+            );
+            for (const [fieldCode, value] of Object.entries(spec.test_values)) {
+                if (value && value.experimental_conditions) {
+                    for (const [key, val] of Object.entries(value.experimental_conditions)) {
+                        if (val) {
+                            // **有高温/低温就不显示室温/常温**：当存在真实温度时，
+                            // 过滤掉所有 室温/常温/低温 默认值（因为真实温度更精确）
+                            if (hasRealTemperature && key === 'temperature' &&
+                                (val === '室温' || val === '常温' || val === '低温')) {
+                                continue;
+                            }
                             allExperimentalConditions.add(`${key}: ${val}`);
                         }
                     }
                 }
             }
-            
+
             // 显示试验条件
             if (allExperimentalConditions.size > 0) {
                 html += `<hr><h6><i class="bi bi-thermometer-half"></i> 试验条件</h6><div class="property-container mb-3">`;

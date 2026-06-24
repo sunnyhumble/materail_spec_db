@@ -1028,6 +1028,10 @@ OCR 识别的原始文本：
                 result_specs.append(spec)
                 continue
 
+            # **保留原始类别**：如果 spec 已经被 LLM 标记为 creep，则优先保留在 creep 类别
+            # 防止 stress/time 等字段被错误地归类到 stress_rupture
+            original_category = spec.get('test_category_code', 'tension')
+
             # 按类别分组字段
             category_groups = {}
             for field_name, field_value in test_values.items():
@@ -1040,6 +1044,14 @@ OCR 识别的原始文本：
                            field_category_map.get(field_name_lower) or \
                            field_category_map.get(field_name_upper) or \
                            spec.get('test_category_code', 'tension')
+
+                # **修复**：如果原始类别是 creep，且字段是 stress/time/duration 等共有的字段，
+                # 不要强行归到 stress_rupture，而是保留在 creep
+                if original_category == 'creep' and category == 'stress_rupture':
+                    if field_name in ('stress', 'test_temperature', 'temperature', 'time', 't', 'duration',
+                                       'creep_elongation_4d', 'creep_elongation_5d', 'creep_reduction_of_area',
+                                       'residual_deformation', 'rupture_time', 'test_time'):
+                        category = 'creep'
 
                 # **硬度标尺字段名规范化**：把 HRC/HB/HV/HRB 等改为 hardness_value，并把标尺名存到 unit 字段
                 normalized_field_name = field_name
@@ -1118,7 +1130,7 @@ OCR 识别的原始文本：
         如果没有，自动生成
         """
         import re
-        
+
         # 提取温度信息
         temperature = None
         test_temperature = None
@@ -1127,7 +1139,7 @@ OCR 识别的原始文本：
                 continue
             # 从 test_temperature 字段提取温度
             if field_name in ['test_temperature', 'temperature'] and 'value' in field_data:
-                temp_val = str(field_data.get('value', ''))
+                temp_val = str(field_data.get('value', '')).strip()
                 if '℃' in temp_val or '°C' in temp_val:
                     temperature = temp_val
                     test_temperature = temp_val
@@ -1137,11 +1149,21 @@ OCR 识别的原始文本：
                 elif '低温' in temp_val:
                     temperature = temp_val
                     test_temperature = temp_val
+                elif re.match(r'^-?\d+(\.\d+)?$', temp_val):
+                    # 纯数字（如 "650"、"650.5"）→ 视为 "650℃"
+                    if float(temp_val) < 0:
+                        # 负数视为低温（如 -40℃）
+                        temperature = f'{temp_val}℃'
+                        test_temperature = f'{temp_val}℃'
+                    else:
+                        temperature = f'{temp_val}℃'
+                        test_temperature = f'{temp_val}℃'
             # 从 experimental_conditions 中提取温度
             exp_cond = field_data.get('experimental_conditions', {})
-            if isinstance(exp_cond, dict) and 'temperature' in exp_cond:
+            if isinstance(exp_cond, dict) and exp_cond.get('temperature'):
+                # **优先使用字段已设置的温度**（避免后续被 室温 覆盖）
                 temperature = exp_cond.get('temperature')
-        
+
         # 确定温度类型
         temp_type = None
         if temperature:
@@ -1151,38 +1173,33 @@ OCR 识别的原始文本：
                 temp_type = '低温'
             elif '℃' in str(temperature) or '°C' in str(temperature):
                 temp_type = '高温'
-        
+
         # 为每个字段处理 item_key 和 experimental_conditions
         result = {}
         for field_name, field_data in fields.items():
             if not isinstance(field_data, dict):
                 result[field_name] = field_data
                 continue
-            
+
             new_field_data = field_data.copy()
-            
-            # 跳过某些特殊字段
-            if field_name in ['test_temperature', 'temperature']:
-                result[field_name] = new_field_data
-                continue
-            
-            # 处理 item_key
-            if 'item_key' not in new_field_data or not new_field_data['item_key']:
-                item_key = self._generate_item_key(field_name, category, temp_type)
-                new_field_data['item_key'] = item_key
-            
-            # 处理 experimental_conditions
+
+            # 处理 experimental_conditions（先于温度填充，确保已存在的值不被覆盖）
             if 'experimental_conditions' not in new_field_data:
                 new_field_data['experimental_conditions'] = {}
             if not isinstance(new_field_data['experimental_conditions'], dict):
                 new_field_data['experimental_conditions'] = {}
-            
-            # 如果有温度信息，添加到 experimental_conditions
+
+            # 如果有温度信息且当前字段没有温度，则填充
             if temperature and not new_field_data['experimental_conditions'].get('temperature'):
                 new_field_data['experimental_conditions']['temperature'] = temperature
-            
+
+            # 处理 item_key
+            if 'item_key' not in new_field_data or not new_field_data['item_key']:
+                item_key = self._generate_item_key(field_name, category, temp_type)
+                new_field_data['item_key'] = item_key
+
             result[field_name] = new_field_data
-        
+
         return result
     
     def _generate_item_key(self, field_name: str, category: str, temp_type: str) -> list:

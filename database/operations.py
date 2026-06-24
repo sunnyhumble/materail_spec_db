@@ -150,6 +150,22 @@ def _normalize_comparison(comparison):
     return comparison
 
 
+def _clean_value(value):
+    """清理 value 字段：去除前缀的比较符号
+
+    LLM 经常把比较符号直接写在 value 里（如 "≥40"），
+    此时应该只保留数字部分 "40"，比较符号放到 comparison 字段。
+    """
+    if value is None:
+        return value
+    if not isinstance(value, str):
+        value = str(value)
+    # 去除前导的比较符号（≥, ≤, >, <, =, ≥, ≤, ＞, ＜ 等）
+    import re
+    cleaned = re.sub(r'^\s*(≥|≤|>|＜|＞|<|=|>=|<=)\s*', '', value)
+    return cleaned.strip()
+
+
 # 需要温度字段的测试类别（未填写时默认"室温"）
 _TEMPERATURE_REQUIRED_CATEGORIES = {
     'tension', 'impact', 'stress_rupture', 'creep',
@@ -172,6 +188,46 @@ def _normalize_category_code(category_code):
     if not category_code:
         return category_code
     return _CATEGORY_CODE_ALIASES.get(category_code, category_code)
+
+
+# 字段代码别名：LLM 容易把"试验时间"（test_time, 试验条件字段）误当作持久时间字段输出
+# 按类别区分：stress_rupture/creep 的持久时间字段名为 rupture_time
+_FIELD_CODE_ALIASES = {
+    'stress_rupture': {
+        'test_time': 'rupture_time',
+        'duration': 'rupture_time',
+        'time': 'rupture_time',
+        't': 'rupture_time',
+    },
+    'creep': {
+        'test_time': 'rupture_time',
+        'duration': 'rupture_time',
+        'time': 'rupture_time',
+        't': 'rupture_time',
+    },
+}
+
+
+def _normalize_field_codes(test_values, category_code):
+    """规范化字段代码：将 LLM 输出的常见错误字段名映射到数据库标准字段名
+
+    典型场景：LLM 经常把"持续时间/持久时间"输出成 test_time（试验时间），
+    但 stress_rupture 类别的标准字段是 rupture_time。
+    """
+    if not isinstance(test_values, dict):
+        return test_values
+    alias_map = _FIELD_CODE_ALIASES.get(category_code, {})
+    if not alias_map:
+        return test_values
+    result = {}
+    for k, v in test_values.items():
+        new_k = alias_map.get(k, alias_map.get(k.lower(), k))
+        # 合并：若 new_k 已存在，保留原值（防止覆盖已有数据）
+        if new_k in result and new_k != k:
+            result[new_k] = v
+        else:
+            result[new_k] = v
+    return result
 
 
 # 含 description/text 字段的类别：超出字段值时聚合到该字段
@@ -439,7 +495,14 @@ class MaterialDatabase:
 
             # 聚合未匹配字段到目标 text 字段（如非金属夹杂多个细分字段 → requirement_description）
             _aggregate_orphan_fields(spec_data, field_map)
-            
+
+            # **字段代码规范化**：LLM 经常把"持续时间"输出成 test_time
+            # 但 stress_rupture 类别用的是 rupture_time，需要别名映射
+            if 'test_values' in spec_data and isinstance(spec_data['test_values'], dict):
+                spec_data['test_values'] = _normalize_field_codes(
+                    spec_data['test_values'], category_code
+                )
+
             # 支持两种格式：新格式（数组）和旧格式（字典）
             test_values_input = spec_data.get('test_values', {})
             
@@ -507,19 +570,21 @@ class MaterialDatabase:
                             test_value.item_key = generate_item_key(field_def.field_name, None)
 
                         if field_def.field_type == 'range':
+                            # **清理 value 中的比较符号前缀**（如 "≥40" → "40"）
+                            cleaned_value = _clean_value(value_item.get('value'))
                             if value_item.get('min_value') is not None:
                                 test_value.min_value = str(value_item.get('min_value'))
-                            elif value_item.get('value') is not None:
-                                test_value.min_value = str(value_item.get('value'))
+                            elif cleaned_value is not None:
+                                test_value.min_value = str(cleaned_value)
 
                             if value_item.get('max_value') is not None:
                                 test_value.max_value = str(value_item.get('max_value'))
-                            elif value_item.get('value') is not None:
-                                test_value.max_value = str(value_item.get('value'))
+                            elif cleaned_value is not None:
+                                test_value.max_value = str(cleaned_value)
 
                             test_value.comparison = normalized_comparison
                         elif field_def.field_type == 'number':
-                            test_value.number_value = str(value_item.get('value')) if value_item.get('value') is not None else None
+                            test_value.number_value = str(_clean_value(value_item.get('value'))) if value_item.get('value') is not None else None
                         elif field_def.field_type in ('string', 'text'):
                             test_value.string_value = value_item.get('value')
 
@@ -606,19 +671,22 @@ class MaterialDatabase:
                         test_value.item_key = generate_item_key(field_def.field_name, None)
 
                     if field_def.field_type == 'range':
+                        # **清理 value 中的比较符号前缀**（如 "≥40" → "40"）
+                        cleaned_value = _clean_value(value_data.get('value'))
                         if value_data.get('min_value') is not None:
                             test_value.min_value = str(value_data.get('min_value'))
-                        elif value_data.get('value') is not None:
-                            test_value.min_value = str(value_data.get('value'))
+                        elif cleaned_value is not None:
+                            test_value.min_value = str(cleaned_value)
 
                         if value_data.get('max_value') is not None:
                             test_value.max_value = str(value_data.get('max_value'))
-                        elif value_data.get('value') is not None:
-                            test_value.max_value = str(value_data.get('value'))
+                        elif cleaned_value is not None:
+                            test_value.max_value = str(cleaned_value)
 
                         test_value.comparison = normalized_comparison
                     elif field_def.field_type == 'number':
-                        test_value.number_value = str(value_data.get('value')) if value_data.get('value') is not None else None
+                        # number 类型也清理一下 value 中的比较符号
+                        test_value.number_value = str(_clean_value(value_data.get('value'))) if value_data.get('value') is not None else None
                     elif field_def.field_type in ('string', 'text'):
                         test_value.string_value = value_data.get('value')
 

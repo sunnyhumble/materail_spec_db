@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response, make_response
 from collections import OrderedDict
 from werkzeug.utils import secure_filename
 import os
@@ -84,7 +84,12 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # 禁用浏览器缓存，确保 JS 模板的最新修改立即生效
+    response = make_response(render_template('index.html'))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
@@ -290,28 +295,38 @@ def batch_import():
     try:
         data = request.get_json()
         specs = data.get('specs', [])
-        
+
         if not specs:
             return jsonify({'success': False, 'error': '没有数据'}), 400
-        
+
         converted_specs = convert_import_data(specs)
-        
+
+        # **合并处理**：当同一材料下有 creep + stress_rupture 两条数据且备注/温度相同时，
+        # LLM 误将一张蠕变性能表拆成了两条，需要合并到 creep 类别
+        converted_specs = _merge_creep_with_stress_rupture(converted_specs)
+
         imported_count = 0
         skipped_count = 0
         duplicates = []
         errors = []
-        
+
         for i, spec in enumerate(converted_specs):
             try:
                 print(f"[导入调试] 第 {i} 条数据：")
                 print(f"  - test_category_code: {spec.get('test_category_code')}")
-                print(f"  - test_values 原始：{spec.get('test_values', {})}")
-                
+                print(f"  - test_values 原始：{spec.get('test_values', {})}, 字段数={len(spec.get('test_values', {}))}")
+
                 if 'test_values' in spec:
                     category_code = spec.get('test_category_code')
                     spec['test_values'] = db.apply_field_mappings(spec['test_values'], category_code)
-                    print(f"  - test_values 映射后：{spec.get('test_values', {})}")
-                
+                    print(f"  - test_values 映射后：{spec.get('test_values', {})}, 字段数={len(spec.get('test_values', {}))}")
+
+                # **过滤空数据**：如果 test_values 映射后为空，且没有任何试验条件，不要入库
+                if not spec.get('test_values'):
+                    print(f"[导入调试] 跳过空数据（无字段）")
+                    skipped_count += 1
+                    continue
+
                 db.add_spec(spec)
                 imported_count += 1
                 print(f"[导入调试] 导入成功")
@@ -333,7 +348,7 @@ def batch_import():
                 print(f"[导入调试] Exception: {str(e)}")
                 print(f"[导入调试] 详细错误: {traceback.format_exc()}")
                 errors.append({'index': i, 'error': str(e)})
-        
+
         return jsonify({
             'success': True,
             'imported_count': imported_count,
@@ -343,6 +358,54 @@ def batch_import():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _merge_creep_with_stress_rupture(specs):
+    """合并 LLM 误拆分的 creep + stress_rupture 数据
+
+    当同一材料（material_spec_number + alloy_grade + status + specification + sampling_direction）
+    同时存在 creep 和 stress_rupture 两条记录时，且备注相同，把 stress_rupture 记录的字段合并到 creep。
+    典型场景：一张"高温蠕变性能表"被 LLM 误拆成 stress_rupture(stress) + creep(其他)。
+    """
+    if not specs or len(specs) < 2:
+        return specs
+
+    def _basic_key(s):
+        return (
+            s.get('material_spec_number', ''),
+            s.get('alloy_grade', ''),
+            s.get('status', ''),
+            s.get('specification', ''),
+            s.get('sampling_direction', ''),
+            s.get('remarks', ''),
+        )
+
+    creep_idx = None
+    sr_idx = None
+    for i, s in enumerate(specs):
+        if s.get('test_category_code') == 'creep':
+            creep_idx = i
+        elif s.get('test_category_code') == 'stress_rupture':
+            sr_idx = i
+
+    if creep_idx is None or sr_idx is None:
+        return specs
+
+    creep_spec = specs[creep_idx]
+    sr_spec = specs[sr_idx]
+
+    if _basic_key(creep_spec) != _basic_key(sr_spec):
+        return specs
+
+    # 合并：把 stress_rupture 中的字段合并到 creep
+    for field_name, field_value in sr_spec.get('test_values', {}).items():
+        if field_name not in creep_spec.get('test_values', {}):
+            creep_spec['test_values'][field_name] = field_value
+
+    # 删除 stress_rupture
+    new_specs = [s for i, s in enumerate(specs) if i != sr_idx]
+    print(f"[合并] stress_rupture 数据已合并到 creep，删除了 1 条")
+    return new_specs
 
 # 字段管理 API
 @app.route('/api/admin/categories', methods=['GET', 'POST'])
