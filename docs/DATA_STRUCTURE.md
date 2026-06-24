@@ -182,6 +182,7 @@
 | ag | 银 Ag | range | % |
 | nb | 铌 Nb | range | % |
 | mg | 镁 Mg | range | % |
+| v  | 钒 V | range | % |
 
 ### 2.2 拉伸 (tension)
 

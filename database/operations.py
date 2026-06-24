@@ -61,6 +61,7 @@ def _generate_chemical_item_key(field_code: str) -> str:
 
 def _init_default_field_mappings(session):
     default_mappings = [
+        # 硬度
         {"source_field": "HRC", "target_field_code": "hardness_value", "category_code": "hardness"},
         {"source_field": "HB", "target_field_code": "hardness_value", "category_code": "hardness"},
         {"source_field": "HBW", "target_field_code": "hardness_value", "category_code": "hardness"},
@@ -76,11 +77,48 @@ def _init_default_field_mappings(session):
         {"source_field": "HRV", "target_field_code": "hardness_value", "category_code": "hardness"},
         {"source_field": "HV10", "target_field_code": "hardness_value", "category_code": "hardness"},
         {"source_field": "HV30", "target_field_code": "hardness_value", "category_code": "hardness"},
+        # 硬度通用映射（LLM 可能输出"hardness"/"硬度"/"硬度值"等通用名）
+        {"source_field": "hardness", "target_field_code": "hardness_value", "category_code": "hardness"},
+        {"source_field": "硬度值", "target_field_code": "hardness_value", "category_code": "hardness"},
+        {"source_field": "硬度", "target_field_code": "hardness_value", "category_code": "hardness"},
+        # 断裂韧度
         {"source_field": "K_IC", "target_field_code": "fracture_toughness", "category_code": "fracture_toughness"},
         {"source_field": "K_Ic", "target_field_code": "fracture_toughness", "category_code": "fracture_toughness"},
         {"source_field": "k_ic", "target_field_code": "fracture_toughness", "category_code": "fracture_toughness"},
         {"source_field": "KIC", "target_field_code": "fracture_toughness", "category_code": "fracture_toughness"},
         {"source_field": "K1C", "target_field_code": "fracture_toughness", "category_code": "fracture_toughness"},
+        # 冲击：LLM 经常输出 A_Ku2/A_ku2/AKU2 等大写形式，但数据库字段代码是 a_ku2
+        {"source_field": "A_Ku2", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "A_ku2", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "AKU2", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "AKu2", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "AKu", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "AKU", "target_field_code": "a_ku2", "category_code": "impact"},
+        {"source_field": "冲击吸收能量", "target_field_code": "impact_energy_ku2", "category_code": "impact"},
+        {"source_field": "A_Kv2", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        {"source_field": "A_kv2", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        {"source_field": "AKv2", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        {"source_field": "AKV2", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        {"source_field": "KV2", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        {"source_field": "KV8", "target_field_code": "impact_energy_kv2", "category_code": "impact"},
+        # 拉伸：LLM 经常输出 sigma_b/sigma_0.2/psi 等小写形式，但数据库字段代码是 tensile_strength/yield_strength/reduction_of_area
+        {"source_field": "sigma_b", "target_field_code": "tensile_strength", "category_code": "tension"},
+        {"source_field": "Sigma_b", "target_field_code": "tensile_strength", "category_code": "tension"},
+        {"source_field": "σ_b", "target_field_code": "tensile_strength", "category_code": "tension"},
+        {"source_field": "sigma_0.2", "target_field_code": "yield_strength", "category_code": "tension"},
+        {"source_field": "Sigma_0.2", "target_field_code": "yield_strength", "category_code": "tension"},
+        {"source_field": "sigma_0_2", "target_field_code": "yield_strength", "category_code": "tension"},
+        {"source_field": "σ_0.2", "target_field_code": "yield_strength", "category_code": "tension"},
+        {"source_field": "psi", "target_field_code": "reduction_of_area", "category_code": "tension"},
+        {"source_field": "Psi", "target_field_code": "reduction_of_area", "category_code": "tension"},
+        {"source_field": "ψ", "target_field_code": "reduction_of_area", "category_code": "tension"},
+        {"source_field": "elongation", "target_field_code": "elongation_5d", "category_code": "tension"},
+        {"source_field": "delta_5", "target_field_code": "elongation_5d", "category_code": "tension"},
+        {"source_field": "delta", "target_field_code": "elongation_5d", "category_code": "tension"},
+        {"source_field": "δ_5", "target_field_code": "elongation_5d", "category_code": "tension"},
+        {"source_field": "δ", "target_field_code": "elongation_5d", "category_code": "tension"},
+        {"source_field": "delta_4", "target_field_code": "elongation_4d", "category_code": "tension"},
+        {"source_field": "δ_4", "target_field_code": "elongation_4d", "category_code": "tension"},
     ]
     
     for mapping_data in default_mappings:
@@ -89,7 +127,7 @@ def _init_default_field_mappings(session):
             target_field_code=mapping_data["target_field_code"],
             category_code=mapping_data["category_code"]
         ).first()
-        
+
         if not existing:
             mapping = FieldMapping(
                 source_field=mapping_data["source_field"],
@@ -98,7 +136,10 @@ def _init_default_field_mappings(session):
                 is_active=True
             )
             session.add(mapping)
-    
+            # 逐条 flush，确保 PostgreSQL sequence 与自增 id 同步，
+            # 避免一次提交多条记录时 sequence 未递增导致的 duplicate key 错误
+            session.flush()
+
     session.commit()
 
 
@@ -467,19 +508,19 @@ class MaterialDatabase:
                 duplicate_id = self.check_duplicate(spec_data)
                 if duplicate_id:
                     raise ValueError(f"数据已存在，记录ID: {duplicate_id}")
-            
+
             category_code = _normalize_category_code(spec_data.get('test_category_code'))
             spec_data['test_category_code'] = category_code
             category = session.query(TestCategory).filter_by(code=category_code).first()
             if not category:
                 raise ValueError(f"测试类别不存在: {category_code}")
-            
+
             required_fields = ['material_spec_number', 'alloy_grade', 'status', 'specification', 'sampling_direction']
             for field in required_fields:
                 value = spec_data.get(field)
                 if value is None or (isinstance(value, str) and value.strip() == ''):
                     raise ValueError(f"缺少必须字段: {field}")
-            
+
             spec = MaterialSpec(
                 material_spec_number=spec_data.get('material_spec_number'),
                 alloy_grade=spec_data.get('alloy_grade'),
@@ -490,8 +531,15 @@ class MaterialDatabase:
                 additional_conditions=json.dumps(spec_data.get('additional_conditions', {})),
                 remarks=spec_data.get('remarks')
             )
-            
+
             field_map = {f.field_code: f for f in category.field_definitions}
+
+            # **应用字段映射**：把 LLM 输出的非标准字段名（A_Ku2、sigma_b 等）映射为数据库标准字段代码
+            # 修复 vision_parser 输出 A_Ku2 但数据库字段代码是 a_ku2 导致数据被丢弃的问题
+            if isinstance(spec_data.get('test_values'), dict):
+                spec_data['test_values'] = self.apply_field_mappings(
+                    spec_data['test_values'], category_code
+                )
 
             # 聚合未匹配字段到目标 text 字段（如非金属夹杂多个细分字段 → requirement_description）
             _aggregate_orphan_fields(spec_data, field_map)
@@ -726,6 +774,12 @@ class MaterialDatabase:
             if 'test_values' in spec_data:
                 category = spec.test_category
                 field_map = {f.field_code: f for f in category.field_definitions}
+
+                # **应用字段映射**：把 LLM 输出的非标准字段名映射为数据库标准字段代码
+                if isinstance(spec_data['test_values'], dict):
+                    spec_data['test_values'] = self.apply_field_mappings(
+                        spec_data['test_values'], category.code
+                    )
 
                 session.query(TestValue).filter_by(spec_id=spec_id).delete()
 

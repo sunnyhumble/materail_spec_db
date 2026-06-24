@@ -182,7 +182,7 @@ class VisionMaterialParser:
                 'chemical_composition': '这是化学成分表，包含 C,Cr,Mo,Al,Ti,Co,B,Ni,Si,Mn,S,P,Zr,Cu,Fe,Mg 等元素含量',
                 'tension': '这是拉伸性能表，包含试验温度、抗拉强度、屈服强度、断后伸长率',
                 'impact': '这是冲击性能表，包含试验温度、冲击吸收能量',
-                'hardness': '这是硬度表',
+                'hardness': '这是硬度表，包含布氏硬度(HB/HBW)、洛氏硬度(HRC/HRA/HRB)、维氏硬度(HV) 等。字段代码使用硬度符号（如 HBW、HRC、HV），不要用"硬度"/"hardness"等通用名',
                 'macro_structure_desctription': '这是宏观组织（低倍）检验表，包含金属流线方向、缺陷类型、等级要求等文字描述',
                 'macro_structure': '这是宏观组织（低倍）检验表，包含金属流线方向、缺陷类型、等级要求等文字描述',
                 'macro_structure_description': '这是宏观组织（低倍）检验表，包含金属流线方向、缺陷类型、等级要求等文字描述',

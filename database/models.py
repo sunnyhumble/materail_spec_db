@@ -166,6 +166,7 @@ def init_default_categories(session):
                 {'field_name': 'Ag', 'field_code': 'ag', 'field_type': 'range', 'unit': '%'},
                 {'field_name': 'Nb', 'field_code': 'nb', 'field_type': 'range', 'unit': '%'},
                 {'field_name': 'Mg', 'field_code': 'mg', 'field_type': 'range', 'unit': '%'},
+                {'field_name': 'V',  'field_code': 'v',  'field_type': 'range', 'unit': '%'},
             ]
         },
         {
@@ -227,6 +228,9 @@ def init_default_categories(session):
                 {'field_name': '硬度类型', 'field_code': 'hardness_type', 'field_type': 'string'},
                 {'field_name': '标尺', 'field_code': 'scale', 'field_type': 'string'},
                 {'field_name': '硬度值', 'field_code': 'hardness_value', 'field_type': 'range'},
+                {'field_name': '布氏硬度 HB', 'field_code': 'hardness_hb', 'field_type': 'range', 'unit': 'HBW'},
+                {'field_name': '洛氏硬度 HRC', 'field_code': 'hardness_hrc', 'field_type': 'range', 'unit': 'HRC'},
+                {'field_name': '维氏硬度 HV', 'field_code': 'hardness_hv', 'field_type': 'range', 'unit': 'HV'},
             ]
         },
         {
